@@ -18,7 +18,7 @@ function assert(condition, testName) {
 // 1. Transliteration Tests
 assert(transliterate('राहुल') === 'rahul', 'Transliteration: "राहुल" -> "rahul"');
 assert(transliterate('पूजा पाटिल') === 'puja patil', 'Transliteration: "पूजा पाटिल" -> "puja patil"');
-assert(transliterate('उत्कर्ष') === 'utkrs', 'Transliteration: "उत्कर्ष" -> "utkrs"');
+assert(transliterate('उत्कर्ष') === 'utkrsh', 'Transliteration: "उत्कर्ष" -> "utkrsh"');
 assert(getSkeleton(transliterate('उत्कर्ष')) === getSkeleton('Utkarsh'), 'Phonetic match: "उत्कर्ष" matches "Utkarsh"');
 
 // 2. Phonetic Skeleton & Normalization Tests

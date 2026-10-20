@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { executeSmartSearch } from '../utils/searchLogic';
 import DataTable from './DataTable';
 
-const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externalFilter }) => {
+const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, externalFilter }) => {
   // Main search keyword
   const [keyword, setKeyword] = useState('');
   

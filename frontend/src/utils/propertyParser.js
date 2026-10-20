@@ -27,7 +27,7 @@ export function extractCarpetArea(desc) {
 
 export function extractFlatNo(desc) {
   if (!desc) return '';
-  const match = String(desc).match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|office|flat)\s*(?:नं|क्र|नं\.|क्र\.)?\s*([A-Za-z0-9\-]+)/i);
+  const match = String(desc).match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|office|flat)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?)?\s*([A-Za-z0-9\-]+)/i);
   return match ? match[1] : '';
 }
 

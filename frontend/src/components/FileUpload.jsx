@@ -26,7 +26,9 @@ const FileUpload = ({ onDataParsed }) => {
         const textDecoder = new TextDecoder('utf-16le');
         const text = textDecoder.decode(data);
         return XLSX.read(text, { type: 'string', cellDates: false });
-      } catch (err) {}
+      } catch {
+        // Fall through to binary decoder
+      }
     }
 
     // Strategy 2: UTF-8 BOM (0xEF 0xBB 0xBF)
@@ -35,7 +37,9 @@ const FileUpload = ({ onDataParsed }) => {
         const textDecoder = new TextDecoder('utf-8');
         const text = textDecoder.decode(data);
         return XLSX.read(text, { type: 'string', cellDates: false });
-      } catch (err) {}
+      } catch {
+        // Fall through to binary decoder
+      }
     }
 
     // Strategy 3: Standard Binary XLSX / XLS array
@@ -140,7 +144,7 @@ const FileUpload = ({ onDataParsed }) => {
                     setEncryptedModalState(null);
                     resolve(wb);
                     return true;
-                  } catch (pwErr) {
+                  } catch {
                     return false;
                   }
                 },

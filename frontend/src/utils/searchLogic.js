@@ -6,11 +6,13 @@ const devanagariMap = {
   'ट': 't', 'ठ': 't', 'ड': 'd', 'ढ': 'd', 'ण': 'n',
   'त': 't', 'थ': 't', 'द': 'd', 'ध': 'd', 'न': 'n',
   'प': 'p', 'फ': 'f', 'ब': 'b', 'भ': 'b', 'म': 'm',
-  'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 's', 'ष': 's', 'स': 's', 'ह': 'h',
+  'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh', 'ष': 'sh', 'स': 's', 'ह': 'h',
   'ळ': 'l', 'क्ष': 'x', 'ज्ञ': 'jn',
   // Matras & modifiers
   'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u', 'ृ': 'r', 'े': 'e', 'ै': 'e', 'ो': 'o', 'ौ': 'o',
   'ॅ': 'a', 'ॉ': 'o', 'ं': 'n', 'ँ': 'n', 'ः': 'h', '्': '',
+  // Devanagari numerals (०-९ to 0-9)
+  '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9',
   // Nukta consonants
   'क़': 'k', 'ख़': 'kh', 'ग़': 'gh', 'ज़': 'z', 'ड़': 'd', 'ढ़': 'dh', 'फ़': 'f'
 };
@@ -50,11 +52,11 @@ export const getSkeleton = (text) => {
     .replace(/kh/g, 'k')
     .replace(/gh/g, 'g')
     .replace(/[aeiouy]/g, '')
-    .replace(/[^a-z\s]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  return normalized.replace(/([a-z])\1+/g, '$1'); 
+  return normalized.replace(/([a-z0-9])\1+/g, '$1'); 
 };
 
 export const cleanParty = (str) => {
@@ -131,7 +133,7 @@ export const getRowSearchBlob = (row) => {
       writable: true,
       configurable: true
     });
-  } catch (e) {
+  } catch {
     row._searchBlob = data;
   }
   return data;
@@ -159,14 +161,18 @@ const checkSingleCell = (cellValue, prep) => {
 
     // 1. Direct whole cell equality
     if (cellClean === qClean) return true;
-    if (qSkel.length > 2 && getSkeleton(cellClean) === qSkel) return true;
+    if (Math.abs(cellClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(cellClean) === qSkel) return true;
 
     // 2. Individual party equality (for multi-person cells e.g. "1) Person A 2) Person B")
-    const parties = rawCell.split(/(?:\d+\)\s*|,|\n|;)/).map(p => p.trim()).filter(Boolean);
-    for (let p of parties) {
-      const pClean = cleanParty(p);
-      if (pClean === qClean) return true;
-      if (qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
+    if (rawCell.includes(')') || rawCell.includes(',') || rawCell.includes('\n') || rawCell.includes(';')) {
+      const parties = rawCell.split(/(?:\d+\)\s*|,|\n|;)/);
+      for (let i = 0; i < parties.length; i++) {
+        const p = parties[i].trim();
+        if (!p) continue;
+        const pClean = cleanParty(p);
+        if (pClean === qClean) return true;
+        if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
+      }
     }
 
     return false;
@@ -204,8 +210,8 @@ const checkSingleCell = (cellValue, prep) => {
           break;
         }
 
-        // Levenshtein typo check only for words of 4-15 chars
-        if (qMeta.len >= 4 && qMeta.len <= 15 && cWord.length >= 4 && cWord.length <= 15) {
+        // Levenshtein typo check only for alphabetic words of 4-15 chars (never numeric identifiers)
+        if (!/\d/.test(qMeta.word) && qMeta.len >= 4 && qMeta.len <= 15 && cWord.length >= 4 && cWord.length <= 15) {
           if (levenshtein(qMeta.word, cWord) <= 1) {
             wordMatched = true;
             break;
@@ -311,6 +317,16 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
 
       if (prep.isGlobal) {
         if (prep.isExact) {
+          const blob = getRowSearchBlob(row);
+          // Fast filter: row blob must at least contain the first word or skeleton token
+          const firstWord = prep.queryWords[0] || prep.rawQuery;
+          if (firstWord && !blob.rawBlob.includes(firstWord) && !blob.transBlob.includes(firstWord)) {
+            const firstSkel = prep.queryWordMeta[0]?.skel;
+            if (!firstSkel || !blob.skelBlob.includes(firstSkel)) {
+              return false;
+            }
+          }
+
           for (let i = 0; i < searchableColumns.length; i++) {
             const col = searchableColumns[i];
             if (row[col] && checkSingleCell(row[col], prep)) return true;
@@ -333,12 +349,12 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
             if (blob.transBlob.includes(qMeta.word)) continue;
             if (qMeta.skel.length > 1 && blob.skelBlob.includes(qMeta.skel)) continue;
 
-            // Fast fuzzy check against row's distinct words
+            // Fast fuzzy check against row's distinct words (alphabetic only)
             let fuzzyMatched = false;
-            if (qMeta.len >= 4 && qMeta.len <= 15) {
+            if (!/\d/.test(qMeta.word) && qMeta.len >= 4 && qMeta.len <= 15) {
               for (let i = 0; i < blob.words.length; i++) {
                 const w = blob.words[i];
-                if (Math.abs(w.length - qMeta.len) <= 1 && levenshtein(qMeta.word, w) <= 1) {
+                if (!/\d/.test(w) && Math.abs(w.length - qMeta.len) <= 1 && levenshtein(qMeta.word, w) <= 1) {
                   fuzzyMatched = true;
                   break;
                 }
