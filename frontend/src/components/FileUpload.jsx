@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { enrichRow } from '../utils/propertyParser';
 
 const FileUpload = ({ onDataParsed }) => {
@@ -8,8 +7,8 @@ const FileUpload = ({ onDataParsed }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  // Helper to decode a single file's arrayBuffer into workbook
-  const parseBufferToWorkbook = (arrayBuffer, fileName) => {
+  // Helper to decode a single file's arrayBuffer into workbook using dynamic XLSX
+  const parseBufferToWorkbook = (XLSX, arrayBuffer, fileName) => {
     const data = new Uint8Array(arrayBuffer);
 
     // Strategy 1: Check for UTF-16LE BOM (0xFF 0xFE) - standard for Maharashtra IGR exports
@@ -55,6 +54,7 @@ const FileUpload = ({ onDataParsed }) => {
     setStatusMessage(files.length > 1 ? `Processing ${files.length} files...` : 'Reading file...');
 
     try {
+      const XLSX = await import('xlsx');
       let combinedData = [];
       let combinedWorkbook = XLSX.utils.book_new();
       let sheetNames = [];
@@ -67,7 +67,7 @@ const FileUpload = ({ onDataParsed }) => {
         }
 
         const buffer = await file.arrayBuffer();
-        const workbook = parseBufferToWorkbook(buffer, file.name);
+        const workbook = parseBufferToWorkbook(XLSX, buffer, file.name);
 
         const currentSheets = workbook.SheetNames || [];
         if (currentSheets.length === 0) continue;
@@ -154,15 +154,11 @@ const FileUpload = ({ onDataParsed }) => {
 
       if (jsonRes) {
         const records = await jsonRes.json();
-        const ws = XLSX.utils.json_to_sheet(records);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'All_3500_Deeds');
-
         setIsLoading(false);
         setStatusMessage('');
         onDataParsed({
           data: records,
-          workbook: wb,
+          workbook: null,
           sheetNames: ['All_3500_Deeds'],
           activeSheet: 'All_3500_Deeds',
           fileName: 'Lohgaon_Property_Records.xlsx'
@@ -191,6 +187,7 @@ const FileUpload = ({ onDataParsed }) => {
 
       if (xlsxRes) {
         const buf = await xlsxRes.arrayBuffer();
+        const XLSX = await import('xlsx');
         const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
         const sheetNames = wb.SheetNames || [];
         const firstSheet = sheetNames[0];
@@ -232,15 +229,11 @@ const FileUpload = ({ onDataParsed }) => {
       { "ID": "EMP-106", "Name": "Utkarsh Nikhare", "Hindi Name": "उत्कर्ष निखारे", "City": "Nagpur", "Department": "Operations", "Phone": "9823344556", "Status": "Active" }
     ];
 
-    const ws = XLSX.utils.json_to_sheet(demoRecords);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Employees");
-
     setIsLoading(false);
 
     onDataParsed({
       data: demoRecords,
-      workbook: wb,
+      workbook: null,
       sheetNames: ["Employees"],
       activeSheet: "Employees",
       fileName: "sample_employees.xlsx"

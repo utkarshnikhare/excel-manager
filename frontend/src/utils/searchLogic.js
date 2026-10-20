@@ -178,12 +178,32 @@ const checkSingleCell = (cellValue, prep) => {
   return false;
 };
 
+// Pre-warm the search cache for all rows
+export const warmSearchIndex = (dataset) => {
+  if (!Array.isArray(dataset)) return;
+  for (let i = 0; i < dataset.length; i++) {
+    getRowSearchBlob(dataset[i]);
+  }
+};
+
 export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') => {
-  const activeCriteria = criteriaList.filter(c => c.column && String(c.query || '').trim() !== "");
+  const activeCriteria = criteriaList.filter(c => {
+    if (c.isRange) return true;
+    return c.column && String(c.query || '').trim() !== "";
+  });
   if (activeCriteria.length === 0) return [];
 
   // OPTIMIZATION: Pre-process queries ONCE before entering the loop
   const preparedCriteria = activeCriteria.map(c => {
+    if (c.isRange || c.column === '_price_range_' || c.column === '_carpet_range_') {
+      return {
+        isRange: true,
+        column: c.column === '_price_range_' ? 'consideration_amt' : (c.column === '_carpet_range_' ? 'carpet_sqft' : c.column),
+        min: c.min !== undefined && c.min !== null && c.min !== '' ? Number(c.min) : null,
+        max: c.max !== undefined && c.max !== null && c.max !== '' ? Number(c.max) : null
+      };
+    }
+
     const rawQuery = String(c.query).trim().toLowerCase();
     const queryTrans = transliterate(rawQuery);
     const querySkel = getSkeleton(queryTrans);
@@ -207,6 +227,14 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
 
   return masterData.filter(row => {
     const checkCriteria = (prep) => {
+      // Handle numeric range filters (Price, Carpet Area)
+      if (prep.isRange) {
+        const val = Number(row[prep.column] || 0);
+        if (prep.min !== null && !isNaN(prep.min) && val < prep.min) return false;
+        if (prep.max !== null && !isNaN(prep.max) && val > prep.max) return false;
+        return true;
+      }
+
       if (prep.isGlobal) {
         const blob = getRowSearchBlob(row);
         // Tier 0: Direct Raw Substring in whole row blob

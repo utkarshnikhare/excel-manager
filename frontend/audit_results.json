@@ -11,8 +11,8 @@
     "Search execution exceeds 50ms on larger queries."
   ],
   "benchmarks": {
-    "hashingTimeMs": 47,
-    "searchSingleQueryMs": 430,
-    "searchMultiQueryMs": 56
+    "hashingTimeMs": 37,
+    "searchSingleQueryMs": 74,
+    "searchMultiQueryMs": 52
   }
 }

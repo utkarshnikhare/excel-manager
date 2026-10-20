@@ -288,3 +288,25 @@ body, html {
 [data-theme='dark'] .alert-info { background-color: rgba(59, 130, 246, 0.1); border-color: #1e3a8a; color: #bfdbfe; }
 [data-theme='dark'] .alert-warning { background-color: rgba(245, 158, 11, 0.1); border-color: #92400e; color: #fde68a; }
 [data-theme='dark'] .alert-success { background-color: rgba(16, 185, 129, 0.1); border-color: #166534; color: #bbf7d0; }
+
+/* Responsive Mobile Optimizations (< 768px) */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 1rem 0.5rem;
+  }
+  .app-header {
+    padding: 0.75rem 1rem;
+  }
+  .top-status-bar {
+    padding: 0.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+  .action-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
 import './App.css'; 
 import Header from './components/Header';
 import FileUpload from './components/FileUpload';
@@ -7,7 +6,7 @@ import SearchPanel from './components/SearchPanel';
 import DataTable from './components/DataTable';
 import KPIDashboard from './components/KPIDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
-import { hashRecord } from './utils/searchLogic';
+import { hashRecord, warmSearchIndex } from './utils/searchLogic';
 import { enrichRow } from './utils/propertyParser';
 
 function App() {
@@ -26,9 +25,10 @@ function App() {
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
   const handleDataParsed = (parsedInfo) => {
+    let enriched = [];
     if (parsedInfo && parsedInfo.data) {
       // Auto-enrich records if needed
-      const enriched = parsedInfo.data.map(r => enrichRow(r));
+      enriched = parsedInfo.data.map(r => enrichRow(r));
       setMasterData(enriched);
       setFileMeta({
         workbook: parsedInfo.workbook,
@@ -37,16 +37,23 @@ function App() {
         fileName: parsedInfo.fileName || 'Spreadsheet.xlsx'
       });
     } else if (Array.isArray(parsedInfo)) {
-      const enriched = parsedInfo.map(r => enrichRow(r));
+      enriched = parsedInfo.map(r => enrichRow(r));
       setMasterData(enriched);
       setFileMeta(null);
     }
     setStagedData([]);
     setIsDone(false);
     setActiveSociety('');
+
+    // Pre-warm the search cache in background for instant keystroke searches
+    if (enriched.length > 0) {
+      setTimeout(() => {
+        warmSearchIndex(enriched);
+      }, 50);
+    }
   };
 
-  const handleSheetChange = (newSheetName) => {
+  const handleSheetChange = async (newSheetName) => {
     if (!fileMeta || !fileMeta.workbook) return;
     
     if (stagedData.length > 0) {
@@ -57,6 +64,7 @@ function App() {
     const worksheet = fileMeta.workbook.Sheets[newSheetName];
     if (!worksheet) return;
 
+    const XLSX = await import('xlsx');
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
     const enriched = jsonData.map(r => enrichRow(r));
     setMasterData(enriched);
@@ -64,6 +72,7 @@ function App() {
     setStagedData([]);
     setIsDone(false);
     setActiveSociety('');
+    setTimeout(() => warmSearchIndex(enriched), 50);
   };
 
   // Robust set operations with deterministic key-sorted hashing
@@ -118,22 +127,39 @@ function App() {
     return `Export_${baseName}_${dateStr}.${extension}`;
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const exportData = stagedData.length > 0 ? stagedData : masterData;
     if (!exportData || exportData.length === 0) return;
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, fileMeta?.activeSheet || "Filtered Data");
-    XLSX.writeFile(workbook, getExportFilename('xlsx'));
+    try {
+      const XLSX = await import('xlsx');
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, fileMeta?.activeSheet || "Filtered Data");
+      XLSX.writeFile(workbook, getExportFilename('xlsx'));
+    } catch (err) {
+      console.error('Failed to export Excel:', err);
+      alert('Failed to generate Excel file: ' + err.message);
+    }
   };
 
   const handleExportCSV = () => {
     const exportData = stagedData.length > 0 ? stagedData : masterData;
     if (!exportData || exportData.length === 0) return;
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
-    // Include UTF-8 BOM (\uFEFF) so Excel on Windows properly displays Marathi/Hindi characters
-    const blob = new Blob(['\uFEFF' + csvOutput], { type: 'text/csv;charset=utf-8;' });
+    
+    // Pure high-speed CSV generator with UTF-8 BOM - zero external dependency
+    const headers = Object.keys(exportData[0]).filter(k => !k.startsWith('_'));
+    const rows = [headers.join(',')];
+    for (let i = 0; i < exportData.length; i++) {
+      const row = exportData[i];
+      const line = headers.map(h => {
+        const val = row[h];
+        if (val === null || val === undefined) return '""';
+        return `"${String(val).replace(/"/g, '""')}"`;
+      });
+      rows.push(line.join(','));
+    }
+    const csvContent = '\uFEFF' + rows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -141,6 +167,7 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Filtered dataset if activeSociety is selected

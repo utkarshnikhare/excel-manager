@@ -11,6 +11,8 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedDeedType, setSelectedDeedType] = useState('');
   const [flatNumber, setFlatNumber] = useState('');
+  const [priceRange, setPriceRange] = useState('');
+  const [carpetRange, setCarpetRange] = useState('');
 
   // Advanced multi-row filter toggle
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -73,6 +75,24 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     if (flatNumber.trim()) {
       list.push({ column: 'flat_no', query: flatNumber.trim() });
     }
+    if (priceRange) {
+      const [minStr, maxStr] = priceRange.split('-');
+      list.push({
+        isRange: true,
+        column: '_price_range_',
+        min: Number(minStr),
+        max: Number(maxStr)
+      });
+    }
+    if (carpetRange) {
+      const [minStr, maxStr] = carpetRange.split('-');
+      list.push({
+        isRange: true,
+        column: '_carpet_range_',
+        min: Number(minStr),
+        max: Number(maxStr)
+      });
+    }
 
     // Advanced conditions if enabled
     if (showAdvanced) {
@@ -84,7 +104,7 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     }
 
     return list;
-  }, [keyword, selectedSociety, selectedYear, selectedDeedType, flatNumber, showAdvanced, advancedConditions]);
+  }, [keyword, selectedSociety, selectedYear, selectedDeedType, flatNumber, priceRange, carpetRange, showAdvanced, advancedConditions]);
 
   // Debounced live search
   useEffect(() => {
@@ -116,6 +136,8 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     setSelectedYear('');
     setSelectedDeedType('');
     setFlatNumber('');
+    setPriceRange('');
+    setCarpetRange('');
     setAdvancedConditions([{ column: 'ALL', query: '' }]);
     setPendingResults(null);
   };
@@ -125,7 +147,7 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     handleReset();
   };
 
-  const hasAnyFilter = keyword || selectedSociety || selectedYear || selectedDeedType || flatNumber || 
+  const hasAnyFilter = keyword || selectedSociety || selectedYear || selectedDeedType || flatNumber || priceRange || carpetRange ||
     (showAdvanced && advancedConditions.some(c => c.query.trim() !== ''));
 
   return (
@@ -330,6 +352,64 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
               }}
             />
           </div>
+
+          {/* Side Filter 5: Price Range */}
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+              💰 Price Range:
+            </label>
+            <select
+              className="form-control"
+              value={priceRange}
+              onChange={(e) => setPriceRange(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                background: 'var(--bg-card)',
+                color: 'var(--text-main)',
+                border: priceRange ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                fontWeight: priceRange ? 700 : 400
+              }}
+            >
+              <option value="">All Prices</option>
+              <option value="0-2500000">Under ₹ 25 Lakh</option>
+              <option value="2500000-5000000">₹ 25 L – ₹ 50 Lakh</option>
+              <option value="5000000-7500000">₹ 50 L – ₹ 75 Lakh</option>
+              <option value="7500000-10000000">₹ 75 L – ₹ 1 Crore</option>
+              <option value="10000000-9999999999">Above ₹ 1 Crore</option>
+              <option value="0-0">₹ 0 (Gifts / Releases)</option>
+            </select>
+          </div>
+
+          {/* Side Filter 6: Carpet Area */}
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+              📐 Carpet Area:
+            </label>
+            <select
+              className="form-control"
+              value={carpetRange}
+              onChange={(e) => setCarpetRange(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                background: 'var(--bg-card)',
+                color: 'var(--text-main)',
+                border: carpetRange ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                fontWeight: carpetRange ? 700 : 400
+              }}
+            >
+              <option value="">All Sizes</option>
+              <option value="0-450">&lt; 450 sq.ft (Studio/1RK)</option>
+              <option value="450-650">450 – 650 sq.ft (1 BHK)</option>
+              <option value="650-950">650 – 950 sq.ft (2 BHK)</option>
+              <option value="950-99999">&gt; 950 sq.ft (3 BHK+)</option>
+            </select>
+          </div>
         </div>
 
         {/* Active Filter Chips bar */}
@@ -361,6 +441,16 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
             {flatNumber && (
               <span style={{ background: '#ec4899', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '15px', fontSize: '0.75rem', fontWeight: 600 }}>
                 Flat: #{flatNumber}
+              </span>
+            )}
+            {priceRange && (
+              <span style={{ background: '#059669', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '15px', fontSize: '0.75rem', fontWeight: 600 }}>
+                Price: {priceRange === '0-0' ? '₹ 0 (Gifts/Rel)' : priceRange === '0-2500000' ? '< ₹25L' : priceRange === '2500000-5000000' ? '₹25L-50L' : priceRange === '5000000-7500000' ? '₹50L-75L' : priceRange === '7500000-10000000' ? '₹75L-1Cr' : '> ₹1Cr'}
+              </span>
+            )}
+            {carpetRange && (
+              <span style={{ background: '#0284c7', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '15px', fontSize: '0.75rem', fontWeight: 600 }}>
+                Area: {carpetRange === '0-450' ? '< 450 sqft' : carpetRange === '450-650' ? '450-650 sqft' : carpetRange === '650-950' ? '650-950 sqft' : '> 950 sqft'}
               </span>
             )}
           </div>

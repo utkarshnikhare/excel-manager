@@ -1,6 +1,6 @@
 import fs from 'fs';
 import * as XLSX from 'xlsx';
-import { executeSmartSearch, transliterate, getSkeleton, levenshtein, hashRecord } from './src/utils/searchLogic.js';
+import { executeSmartSearch, transliterate, getSkeleton, levenshtein, hashRecord, warmSearchIndex } from './src/utils/searchLogic.js';
 import { extractSociety, extractCarpetArea, extractFlatNo, formatINR, cleanParties, enrichRow } from './src/utils/propertyParser.js';
 
 console.log('================================================================');
@@ -15,6 +15,12 @@ const findings = {
   weaknesses: [],
   benchmarks: {}
 };
+
+// Pre-warm the search index (as the app does on load)
+const tw = performance.now();
+warmSearchIndex(deeds);
+const tWarm = performance.now() - tw;
+console.log(`⚡ Pre-warming search cache for 3,498 rows: ${tWarm.toFixed(2)} ms`);
 
 // -------------------------------------------------------------
 // AUDIT 1: PERFORMANCE BENCHMARKING
@@ -44,7 +50,16 @@ const tSearchMulti = performance.now() - t2;
 findings.benchmarks.searchMultiQueryMs = Math.round(tSearchMulti);
 console.log(`⚡ 3-Condition Filter (${resMulti.length} hits): ${tSearchMulti.toFixed(2)} ms`);
 
-if (tSearch1 < 50 && tSearchMulti < 50) {
+// Numeric Range Filter Benchmark
+const t3 = performance.now();
+const resRange = executeSmartSearch(deeds, [
+  { isRange: true, column: '_price_range_', min: 2500000, max: 5000000 },
+  { isRange: true, column: '_carpet_range_', min: 500, max: 800 }
+], 'AND');
+const tRange = performance.now() - t3;
+console.log(`⚡ Price (₹25L-50L) + Carpet (500-800 sqft) Filter (${resRange.length} hits): ${tRange.toFixed(2)} ms`);
+
+if (tSearch1 < 50 && tSearchMulti < 50 && tRange < 50) {
   findings.strengths.push('In-memory search execution is sub-50ms (ultra-fast for 3,498 records).');
 } else {
   findings.weaknesses.push('Search execution exceeds 50ms on larger queries.');

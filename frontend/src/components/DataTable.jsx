@@ -12,6 +12,7 @@ const DataTable = ({ data, onDeleteRow }) => {
     'internaldocumentnumber', 'micrno', 'bank_type', 'party_code', 'status', 'dateofexecution'
   ]));
   const [showColPicker, setShowColPicker] = useState(false);
+  const [displayMode, setDisplayMode] = useState('table'); // 'table' or 'cards'
 
   // Safe data array ensuring zero hook skips or crashes
   const safeData = useMemo(() => Array.isArray(data) ? data : [], [data]);
@@ -293,6 +294,45 @@ const DataTable = ({ data, onDeleteRow }) => {
               </div>
             )}
           </div>
+          {/* View Mode Toggle: Table View vs Card View */}
+          <div style={{
+            display: 'inline-flex',
+            background: 'var(--bg-main)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '6px',
+            padding: '2px'
+          }}>
+            <button
+              onClick={() => setDisplayMode('table')}
+              style={{
+                padding: '0.25rem 0.55rem',
+                borderRadius: '4px',
+                border: 'none',
+                background: displayMode === 'table' ? '#3b82f6' : 'transparent',
+                color: displayMode === 'table' ? '#fff' : 'var(--text-muted)',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              ⊞ Table
+            </button>
+            <button
+              onClick={() => setDisplayMode('cards')}
+              style={{
+                padding: '0.25rem 0.55rem',
+                borderRadius: '4px',
+                border: 'none',
+                background: displayMode === 'cards' ? '#3b82f6' : 'transparent',
+                color: displayMode === 'cards' ? '#fff' : 'var(--text-muted)',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              🗂️ Cards
+            </button>
+          </div>
         </div>
 
         <div>
@@ -317,98 +357,226 @@ const DataTable = ({ data, onDeleteRow }) => {
         </div>
       </div>
 
-      {/* Table Container with Sticky Header */}
-      <div style={{ overflowX: 'auto', maxHeight: '520px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-        <table className="excel-table modern-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 1, borderBottom: '2px solid var(--border-color)' }}>
-            <tr>
-              <th style={{ padding: '0.6rem 0.8rem', width: '45px', textAlign: 'center' }}>#</th>
-              <th style={{ padding: '0.6rem 0.8rem', width: '90px', textAlign: 'center' }}>Details</th>
-              {visibleColumns.map(col => (
-                <th
-                  key={col}
-                  onClick={() => handleSort(col)}
-                  style={{
-                    padding: '0.6rem 0.9rem',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    fontWeight: '600',
-                    fontSize: '0.85rem',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title="Click to sort"
-                >
-                  {col.replace(/_/g, ' ')}
-                  <span style={{ fontSize: '0.8rem', color: sortConfig.key === col ? 'var(--primary-color)' : 'var(--text-muted)' }}>
-                    {getSortIcon(col)}
-                  </span>
-                </th>
-              ))}
-              {onDeleteRow && (
-                <th style={{ padding: '0.6rem 0.8rem', width: '60px', textAlign: 'center' }}>Del</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedData.length > 0 ? (
-              paginatedData.map((row, idx) => {
-                const rowNumber = rowsPerPage === 'All' ? idx + 1 : (activePage - 1) * rowsPerPage + idx + 1;
-                return (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.1s ease' }}>
-                    <td style={{ padding: '0.5rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center' }}>
-                      {rowNumber}
-                    </td>
-                    <td style={{ padding: '0.5rem 0.8rem', textAlign: 'center' }}>
-                      <button
-                        onClick={() => setSelectedDeed(row)}
-                        className="btn btn-outline"
-                        style={{
-                          padding: '0.2rem 0.5rem',
-                          fontSize: '0.75rem',
-                          borderRadius: '4px',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        📄 View
-                      </button>
-                    </td>
-                    {visibleColumns.map(col => (
-                      <td key={col} style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-                        {renderCellContent(col, row[col], row)}
+      {displayMode === 'cards' ? (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: '1rem',
+          maxHeight: '560px',
+          overflowY: 'auto',
+          padding: '0.25rem'
+        }}>
+          {paginatedData.length > 0 ? (
+            paginatedData.map((row, idx) => (
+              <div
+                key={idx}
+                className="card"
+                style={{
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  boxShadow: 'var(--shadow-sm)',
+                  background: 'var(--bg-card)'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#3b82f6', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                        Doc #{row.docno || 'N/A'}
+                      </span>
+                      <h4 style={{ margin: '0.35rem 0 0 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>
+                        {row.society || 'Residential Property'}
+                      </h4>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      📅 {row.registrationdate || '—'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                    {row.flat_no && (
+                      <span style={{ fontSize: '0.75rem', background: 'rgba(236, 72, 153, 0.1)', color: '#ec4899', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
+                        🚪 Flat {row.flat_no}
+                      </span>
+                    )}
+                    {row.carpet_sqft > 0 && (
+                      <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
+                        📐 {row.carpet_sqft} sq.ft
+                      </span>
+                    )}
+                    {row.docname && (
+                      <span style={{ fontSize: '0.75rem', background: 'var(--bg-main)', color: 'var(--text-muted)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                        📜 {row.docname}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{
+                    background: 'var(--bg-main)',
+                    padding: '0.6rem 0.75rem',
+                    borderRadius: '6px',
+                    marginBottom: '0.65rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        Consideration
+                      </div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#10b981' }}>
+                        {formatINR(row.consideration_amt)}
+                      </div>
+                    </div>
+                    {row.rate_per_sqft > 0 && (
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                          Rate / sq.ft
+                        </div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6' }}>
+                          ₹ {Number(row.rate_per_sqft).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.purchaserparty}>
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Buyer: </span>
+                      {row.purchaserparty || '—'}
+                    </div>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.sellerparty}>
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Seller: </span>
+                      {row.sellerparty || '—'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+                  <button
+                    onClick={() => setSelectedDeed(row)}
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem', borderRadius: '4px' }}
+                  >
+                    📄 View Index-II
+                  </button>
+                  {onDeleteRow && (
+                    <button
+                      onClick={() => onDeleteRow(row)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', opacity: 0.8 }}
+                      title="Delete row"
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div style={{ gridColumn: '1 / -1', padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No matching records found.
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Table Container with Sticky Header */
+        <div style={{ overflowX: 'auto', maxHeight: '520px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+          <table className="excel-table modern-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 1, borderBottom: '2px solid var(--border-color)' }}>
+              <tr>
+                <th style={{ padding: '0.6rem 0.8rem', width: '45px', textAlign: 'center' }}>#</th>
+                <th style={{ padding: '0.6rem 0.8rem', width: '90px', textAlign: 'center' }}>Details</th>
+                {visibleColumns.map(col => (
+                  <th
+                    key={col}
+                    onClick={() => handleSort(col)}
+                    style={{
+                      padding: '0.6rem 0.9rem',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      fontWeight: '600',
+                      fontSize: '0.85rem',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Click to sort"
+                  >
+                    {col.replace(/_/g, ' ')}
+                    <span style={{ fontSize: '0.8rem', color: sortConfig.key === col ? 'var(--primary-color)' : 'var(--text-muted)' }}>
+                      {getSortIcon(col)}
+                    </span>
+                  </th>
+                ))}
+                {onDeleteRow && (
+                  <th style={{ padding: '0.6rem 0.8rem', width: '60px', textAlign: 'center' }}>Del</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.length > 0 ? (
+                paginatedData.map((row, idx) => {
+                  const rowNumber = rowsPerPage === 'All' ? idx + 1 : (activePage - 1) * rowsPerPage + idx + 1;
+                  return (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.1s ease' }}>
+                      <td style={{ padding: '0.5rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center' }}>
+                        {rowNumber}
                       </td>
-                    ))}
-                    {onDeleteRow && (
                       <td style={{ padding: '0.5rem 0.8rem', textAlign: 'center' }}>
                         <button
-                          onClick={() => onDeleteRow(row)}
-                          title="Delete this row"
+                          onClick={() => setSelectedDeed(row)}
+                          className="btn btn-outline"
                           style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '1rem',
-                            opacity: 0.8
+                            padding: '0.2rem 0.5rem',
+                            fontSize: '0.75rem',
+                            borderRadius: '4px',
+                            whiteSpace: 'nowrap'
                           }}
-                          onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
-                          onMouseOut={(e) => e.currentTarget.style.opacity = '0.8'}
                         >
-                          🗑️
+                          📄 View
                         </button>
                       </td>
-                    )}
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={visibleColumns.length + (onDeleteRow ? 3 : 2)} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No matching records found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                      {visibleColumns.map(col => (
+                        <td key={col} style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                          {renderCellContent(col, row[col], row)}
+                        </td>
+                      ))}
+                      {onDeleteRow && (
+                        <td style={{ padding: '0.5rem 0.8rem', textAlign: 'center' }}>
+                          <button
+                            onClick={() => onDeleteRow(row)}
+                            title="Delete this row"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '1rem',
+                              opacity: 0.8
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+                            onMouseOut={(e) => e.currentTarget.style.opacity = '0.8'}
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={visibleColumns.length + (onDeleteRow ? 3 : 2)} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No matching records found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Bottom Pagination Controls */}
       <div style={{
