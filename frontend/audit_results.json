@@ -1,0 +1,18 @@
+{
+  "strengths": [
+    "Special characters in query do not crash the regex or search engine.",
+    "Multi-word phrase search works across first and last names.",
+    "Immune to ReDoS (Regular Expression Denial of Service) freezes.",
+    "100% of deeds have valid document numbers and registration dates.",
+    "CSV export includes UTF-8 BOM preventing Excel character corruption on Windows.",
+    "Excel (.xlsx) generator successfully creates valid binary buffers."
+  ],
+  "weaknesses": [
+    "Search execution exceeds 50ms on larger queries."
+  ],
+  "benchmarks": {
+    "hashingTimeMs": 47,
+    "searchSingleQueryMs": 430,
+    "searchMultiQueryMs": 56
+  }
+}

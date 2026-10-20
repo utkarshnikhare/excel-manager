@@ -7,7 +7,7 @@ const devanagariMap = {
   'त': 't', 'थ': 't', 'द': 'd', 'ध': 'd', 'न': 'n',
   'प': 'p', 'फ': 'f', 'ब': 'b', 'भ': 'b', 'म': 'm',
   'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 's', 'ष': 's', 'स': 's', 'ह': 'h',
-  'ळ': 'l', 'क्ष': 'x', 'ज्ञ': 'gy',
+  'ळ': 'l', 'क्ष': 'x', 'ज्ञ': 'jn',
   // Matras & modifiers
   'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u', 'ृ': 'r', 'े': 'e', 'ै': 'e', 'ो': 'o', 'ौ': 'o',
   'ॅ': 'a', 'ॉ': 'o', 'ं': 'n', 'ँ': 'n', 'ः': 'h', '्': '',
@@ -15,33 +15,48 @@ const devanagariMap = {
   'क़': 'k', 'ख़': 'kh', 'ग़': 'gh', 'ज़': 'z', 'ड़': 'd', 'ढ़': 'dh', 'फ़': 'f'
 };
 
+const hasDevanagari = /[\u0900-\u097F]/;
+
 export const transliterate = (text) => {
+  if (!text) return "";
+  const str = String(text);
+  // Fast path: If pure English/ASCII, return lowercased directly
+  if (!hasDevanagari.test(str)) {
+    return str.toLowerCase();
+  }
+
   let result = "";
-  // Strip virama (halant \u094D) and zero-width characters (\u200C, \u200D)
-  const str = String(text || '').replace(/[\u094D\u200C\u200D]/g, '').toLowerCase();
-  for (let char of str) {
+  const normalized = str.replace(/[\u094D\u200C\u200D]/g, '').toLowerCase();
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
     result += devanagariMap[char] || char;
   }
   return result;
 };
 
 // Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f, dny=jny=gy=jn)
+// Preserves word boundaries (spaces) to prevent false-positive cross-word bleed
 export const getSkeleton = (text) => {
-  let normalized = text
+  if (!text) return "";
+  let normalized = String(text)
     .toLowerCase()
     .replace(/dny|jny|gy/g, 'jn')
     .replace(/ph/g, 'f')
     .replace(/w/g, 'v')
     .replace(/sh/g, 's')
-    .replace(/[aeiouy\W0-9_]/g, '');
+    .replace(/[aeiouy]/g, '')
+    .replace(/[^a-z\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  // Compress consecutive identical letters (e.g. kk -> k, mm -> m)
-  return normalized.replace(/(.)\1+/g, '$1'); 
+  return normalized.replace(/([a-z])\1+/g, '$1'); 
 };
 
 export const levenshtein = (a, b) => {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
+  if (Math.abs(a.length - b.length) > 2) return 99; // Fast bail-out for lengths differing by > 2
+
   const matrix = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
   for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
@@ -73,85 +88,170 @@ export const hashRecord = (row) => {
   return JSON.stringify(normalizedObj);
 };
 
+// Target text fields for global search to avoid scanning numeric garbage
+const searchableColumns = [
+  'sellerparty', 'purchaserparty', 'propertydescription', 'docno',
+  'society', 'flat_no', 'docname', 'sroname', 'areaname', 'registrationdate'
+];
+
+// Pre-indexed search representation on the row (cached lazily & non-enumerable)
+export const getRowSearchBlob = (row) => {
+  if (row._searchBlob) return row._searchBlob;
+  const rawParts = [];
+  for (let i = 0; i < searchableColumns.length; i++) {
+    const col = searchableColumns[i];
+    const val = row[col];
+    if (val !== undefined && val !== null && val !== '') {
+      rawParts.push(String(val).toLowerCase());
+    }
+  }
+  const rawBlob = rawParts.join(' ');
+  const transBlob = transliterate(rawBlob);
+  const skelBlob = getSkeleton(transBlob);
+  const words = Array.from(new Set(transBlob.split(/\s+/).filter(w => w.length >= 4)));
+
+  const data = { rawBlob, transBlob, skelBlob, words };
+  try {
+    Object.defineProperty(row, '_searchBlob', {
+      value: data,
+      enumerable: false,
+      writable: true,
+      configurable: true
+    });
+  } catch (e) {
+    row._searchBlob = data;
+  }
+  return data;
+};
+
+const checkSingleCell = (cellValue, prep) => {
+  if (cellValue === null || cellValue === undefined || cellValue === '') return false;
+  const rawCell = String(cellValue).toLowerCase();
+
+  // Tier 0: Direct Raw Match (Instant substring check)
+  if (rawCell.includes(prep.rawQuery)) return true;
+
+  const cellTrans = transliterate(rawCell);
+
+  // Tier 1: Fast Transliterated Substring Match
+  if (cellTrans.includes(prep.queryTrans)) return true;
+
+  const cellSkel = getSkeleton(cellTrans);
+
+  // Tier 2: Fast Phonetic Skeleton Match
+  if (prep.querySkel.length > 1 && cellSkel.includes(prep.querySkel)) return true;
+
+  // Tier 3: Multi-Word Matcher (Typos & partial words)
+  if (prep.queryWordMeta.length > 0) {
+    const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
+    let matchedWordsCount = 0;
+
+    for (let qMeta of prep.queryWordMeta) {
+      let wordMatched = false;
+
+      for (let cWord of cellWords) {
+        if (cWord.includes(qMeta.word)) {
+          wordMatched = true;
+          break;
+        }
+
+        if (qMeta.skel.length > 1 && getSkeleton(cWord).includes(qMeta.skel)) {
+          wordMatched = true;
+          break;
+        }
+
+        // Levenshtein typo check only for words of 4-15 chars
+        if (qMeta.len >= 4 && qMeta.len <= 15 && cWord.length >= 4 && cWord.length <= 15) {
+          if (levenshtein(qMeta.word, cWord) <= 1) {
+            wordMatched = true;
+            break;
+          }
+        }
+      }
+
+      if (wordMatched) matchedWordsCount++;
+    }
+
+    if (matchedWordsCount === prep.queryWordMeta.length) return true;
+  }
+
+  return false;
+};
+
 export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') => {
-  const activeCriteria = criteriaList.filter(c => c.column && c.query.trim() !== "");
-  
+  const activeCriteria = criteriaList.filter(c => c.column && String(c.query || '').trim() !== "");
   if (activeCriteria.length === 0) return [];
 
+  // OPTIMIZATION: Pre-process queries ONCE before entering the loop
+  const preparedCriteria = activeCriteria.map(c => {
+    const rawQuery = String(c.query).trim().toLowerCase();
+    const queryTrans = transliterate(rawQuery);
+    const querySkel = getSkeleton(queryTrans);
+    const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
+    const queryWordMeta = queryWords.map(w => ({
+      word: w,
+      skel: getSkeleton(w),
+      len: w.length
+    }));
+
+    return {
+      column: c.column,
+      rawQuery,
+      queryTrans,
+      querySkel,
+      queryWords,
+      queryWordMeta,
+      isGlobal: c.column === 'ALL' || c.column === '_ALL_'
+    };
+  });
+
   return masterData.filter(row => {
-    const checkCriteria = (criteria) => {
-      const checkSingleCell = (cellValue) => {
-        const rawQuery = String(criteria.query).trim().toLowerCase();
-        const rawCell = String(cellValue ?? '').trim().toLowerCase();
+    const checkCriteria = (prep) => {
+      if (prep.isGlobal) {
+        const blob = getRowSearchBlob(row);
+        // Tier 0: Direct Raw Substring in whole row blob
+        if (blob.rawBlob.includes(prep.rawQuery)) return true;
+        // Tier 1: Transliterated Substring in whole row blob
+        if (blob.transBlob.includes(prep.queryTrans)) return true;
+        // Tier 2: Phonetic Skeleton in whole row blob
+        if (prep.querySkel.length > 1 && blob.skelBlob.includes(prep.querySkel)) return true;
 
-        // Tier 0: Direct Raw Match (Instant for Phone numbers, IDs, Numbers, Exact text)
-        if (rawCell.includes(rawQuery)) return true;
+        // Tier 3: Multi-word query (all words must match)
+        if (prep.queryWordMeta.length > 0) {
+          let allWordsMatched = true;
+          for (let qMeta of prep.queryWordMeta) {
+            if (blob.transBlob.includes(qMeta.word)) continue;
+            if (qMeta.skel.length > 1 && blob.skelBlob.includes(qMeta.skel)) continue;
 
-        const queryTrans = transliterate(criteria.query);
-        const cellTrans = transliterate(cellValue);
-
-        // Tier 1: Fast Transliterated Substring Match
-        if (cellTrans.includes(queryTrans)) return true;
-
-        const querySkel = getSkeleton(queryTrans);
-        const cellSkel = getSkeleton(cellTrans);
-
-        // Tier 2: Fast Phonetic Skeleton Match
-        if (querySkel.length > 1 && cellSkel.includes(querySkel)) return true;
-
-        // Tier 3: Multi-Word Phrase Matcher
-        const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
-        const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
-
-        if (queryWords.length > 0) {
-          let matchedWordsCount = 0;
-
-          for (let qWord of queryWords) {
-            const qWordSkel = getSkeleton(qWord);
-            let wordMatched = false;
-
-            for (let cWord of cellWords) {
-              if (cWord.includes(qWord)) {
-                wordMatched = true;
-                break;
-              }
-
-              const cWordSkel = getSkeleton(cWord);
-              if (qWordSkel.length > 1 && cWordSkel.includes(qWordSkel)) {
-                wordMatched = true;
-                break;
-              }
-
-              if (qWord.length >= 4 && cWord.length >= 4) {
-                const dist = levenshtein(qWord, cWord);
-                if (dist <= 1) {
-                  wordMatched = true;
+            // Fast fuzzy check against row's distinct words
+            let fuzzyMatched = false;
+            if (qMeta.len >= 4 && qMeta.len <= 15) {
+              for (let i = 0; i < blob.words.length; i++) {
+                const w = blob.words[i];
+                if (Math.abs(w.length - qMeta.len) <= 1 && levenshtein(qMeta.word, w) <= 1) {
+                  fuzzyMatched = true;
                   break;
                 }
               }
             }
-
-            if (wordMatched) matchedWordsCount++;
+            if (!fuzzyMatched) {
+              allWordsMatched = false;
+              break;
+            }
           }
-
-          if (matchedWordsCount === queryWords.length) return true;
+          if (allWordsMatched) return true;
         }
 
         return false;
-      };
-
-      // Support Global Search across all fields in row
-      if (criteria.column === 'ALL' || criteria.column === '_ALL_') {
-        return Object.values(row).some(val => checkSingleCell(val));
       }
 
-      return checkSingleCell(row[criteria.column]);
+      return checkSingleCell(row[prep.column], prep);
     };
 
     if (matchMode === 'AND') {
-      return activeCriteria.every(checkCriteria);
+      return preparedCriteria.every(checkCriteria);
     } else {
-      return activeCriteria.some(checkCriteria);
+      return preparedCriteria.some(checkCriteria);
     }
   });
 };
