@@ -13,6 +13,24 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
   const [flatNumber, setFlatNumber] = useState('');
   const [priceRange, setPriceRange] = useState('');
   const [carpetRange, setCarpetRange] = useState('');
+  const [isExactMatch, setIsExactMatch] = useState(false);
+  const [selectedSourceFile, setSelectedSourceFile] = useState('');
+
+  const isPropertyDataset = useMemo(() => {
+    if (!masterData || masterData.length === 0) return false;
+    const first = masterData[0];
+    return Boolean(first.docno || first.society || first.consideration_amt || first.propertydescription);
+  }, [masterData]);
+
+  const uploadedFilesList = useMemo(() => {
+    if (!masterData) return [];
+    const fileCounts = {};
+    for (let i = 0; i < masterData.length; i++) {
+      const f = masterData[i].source_file;
+      if (f) fileCounts[f] = (fileCounts[f] || 0) + 1;
+    }
+    return Object.entries(fileCounts).sort((a, b) => b[1] - a[1]);
+  }, [masterData]);
 
   // Advanced multi-row filter toggle
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -63,6 +81,9 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     if (keyword.trim()) {
       list.push({ column: 'ALL', query: keyword.trim() });
     }
+    if (selectedSourceFile) {
+      list.push({ column: 'source_file', query: selectedSourceFile });
+    }
     if (selectedSociety) {
       list.push({ column: 'society', query: selectedSociety });
     }
@@ -104,7 +125,7 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     }
 
     return list;
-  }, [keyword, selectedSociety, selectedYear, selectedDeedType, flatNumber, priceRange, carpetRange, showAdvanced, advancedConditions]);
+  }, [keyword, selectedSourceFile, selectedSociety, selectedYear, selectedDeedType, flatNumber, priceRange, carpetRange, showAdvanced, advancedConditions]);
 
   // Debounced live search
   useEffect(() => {
@@ -120,7 +141,7 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      const results = executeSmartSearch(masterData, activeConditions, matchMode);
+      const results = executeSmartSearch(masterData, activeConditions, matchMode, isExactMatch);
       setPendingResults(results);
       setIsSearching(false);
     }, 200);
@@ -128,7 +149,7 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [activeConditions, masterData, matchMode]);
+  }, [activeConditions, masterData, matchMode, isExactMatch]);
 
   const handleReset = () => {
     setKeyword('');
@@ -138,6 +159,8 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
     setFlatNumber('');
     setPriceRange('');
     setCarpetRange('');
+    setSelectedSourceFile('');
+    setIsExactMatch(false);
     setAdvancedConditions([{ column: 'ALL', query: '' }]);
     setPendingResults(null);
   };
@@ -239,6 +262,22 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
               </button>
             )}
           </div>
+
+          {/* Exact Match Toggle & Tip */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: isExactMatch ? '#2563eb' : 'var(--text-main)', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={isExactMatch}
+                onChange={(e) => setIsExactMatch(e.target.checked)}
+                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2563eb' }}
+              />
+              <span>🎯 Exact Match Only (कठोर जुळणी - फक्त आणि फक्त तोच व्यक्ती)</span>
+            </label>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              💡 Exact phrase search: Use double quotes like <code style={{ background: 'var(--bg-card)', padding: '1px 5px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>"Sanjay Patil"</code>
+            </span>
+          </div>
         </div>
 
         {/* Row 2: Side-by-Side Quick Narrow-Down Dropdowns */}
@@ -248,168 +287,201 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
           gap: '0.75rem',
           alignItems: 'flex-end'
         }}>
-          {/* Side Filter 1: Project / Society */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
-              🏢 Project / Society:
-            </label>
-            <select
-              className="form-control"
-              value={selectedSociety}
-              onChange={(e) => setSelectedSociety(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                background: 'var(--bg-card)',
-                color: 'var(--text-main)',
-                border: selectedSociety ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                fontWeight: selectedSociety ? 700 : 400
-              }}
-            >
-              <option value="">All Projects ({masterData?.length || 0})</option>
-              {societies.map(([soc, cnt]) => (
-                <option key={soc} value={soc}>{soc} ({cnt})</option>
-              ))}
-            </select>
-          </div>
+          {/* Source File Filter (when multiple files uploaded) */}
+          {uploadedFilesList.length > 1 && (
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                📁 Originating File ({uploadedFilesList.length}):
+              </label>
+              <select
+                className="form-control"
+                value={selectedSourceFile}
+                onChange={(e) => setSelectedSourceFile(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-main)',
+                  border: selectedSourceFile ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                  fontWeight: selectedSourceFile ? 700 : 400
+                }}
+              >
+                <option value="">All Uploaded Files ({uploadedFilesList.length})</option>
+                {uploadedFilesList.map(([fName, count]) => (
+                  <option key={fName} value={fName}>{fName} ({count.toLocaleString()} rows)</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          {/* Side Filter 2: Year */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
-              📅 Registration Year:
-            </label>
-            <select
-              className="form-control"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                background: 'var(--bg-card)',
-                color: 'var(--text-main)',
-                border: selectedYear ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                fontWeight: selectedYear ? 700 : 400
-              }}
-            >
-              <option value="">All Years</option>
-              {years.map(y => (
-                <option key={y} value={y}>{y} Deeds</option>
-              ))}
-            </select>
-          </div>
+          {isPropertyDataset && (
+            <>
+              {/* Side Filter 1: Project / Society */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                  🏢 Project / Society:
+                </label>
+                <select
+                  className="form-control"
+                  value={selectedSociety}
+                  onChange={(e) => setSelectedSociety(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: selectedSociety ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                    fontWeight: selectedSociety ? 700 : 400
+                  }}
+                >
+                  <option value="">All Projects ({masterData?.length || 0})</option>
+                  {societies.map(([soc, cnt]) => (
+                    <option key={soc} value={soc}>{soc} ({cnt})</option>
+                  ))}
+                </select>
+              </div>
 
-          {/* Side Filter 3: Deed Type */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
-              📜 Deed / Document Type:
-            </label>
-            <select
-              className="form-control"
-              value={selectedDeedType}
-              onChange={(e) => setSelectedDeedType(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                background: 'var(--bg-card)',
-                color: 'var(--text-main)',
-                border: selectedDeedType ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                fontWeight: selectedDeedType ? 700 : 400
-              }}
-            >
-              <option value="">All Deed Types</option>
-              {deedTypes.slice(0, 10).map(([dt, cnt]) => (
-                <option key={dt} value={dt}>{dt} ({cnt})</option>
-              ))}
-            </select>
-          </div>
+              {/* Side Filter 2: Year */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                  📅 Registration Year:
+                </label>
+                <select
+                  className="form-control"
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: selectedYear ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                    fontWeight: selectedYear ? 700 : 400
+                  }}
+                >
+                  <option value="">All Years</option>
+                  {years.map(y => (
+                    <option key={y} value={y}>{y} Deeds</option>
+                  ))}
+                </select>
+              </div>
 
-          {/* Side Filter 4: Flat / Unit Number */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
-              🚪 Flat / Unit Number:
-            </label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="e.g. 106, 612..."
-              value={flatNumber}
-              onChange={(e) => setFlatNumber(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                background: 'var(--bg-card)',
-                color: 'var(--text-main)',
-                border: flatNumber ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                fontWeight: flatNumber ? 700 : 400
-              }}
-            />
-          </div>
+              {/* Side Filter 3: Deed Type */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                  📜 Deed / Document Type:
+                </label>
+                <select
+                  className="form-control"
+                  value={selectedDeedType}
+                  onChange={(e) => setSelectedDeedType(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: selectedDeedType ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                    fontWeight: selectedDeedType ? 700 : 400
+                  }}
+                >
+                  <option value="">All Deed Types</option>
+                  {deedTypes.slice(0, 10).map(([dt, cnt]) => (
+                    <option key={dt} value={dt}>{dt} ({cnt})</option>
+                  ))}
+                </select>
+              </div>
 
-          {/* Side Filter 5: Price Range */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
-              💰 Price Range:
-            </label>
-            <select
-              className="form-control"
-              value={priceRange}
-              onChange={(e) => setPriceRange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                background: 'var(--bg-card)',
-                color: 'var(--text-main)',
-                border: priceRange ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                fontWeight: priceRange ? 700 : 400
-              }}
-            >
-              <option value="">All Prices</option>
-              <option value="0-2500000">Under ₹ 25 Lakh</option>
-              <option value="2500000-5000000">₹ 25 L – ₹ 50 Lakh</option>
-              <option value="5000000-7500000">₹ 50 L – ₹ 75 Lakh</option>
-              <option value="7500000-10000000">₹ 75 L – ₹ 1 Crore</option>
-              <option value="10000000-9999999999">Above ₹ 1 Crore</option>
-              <option value="0-0">₹ 0 (Gifts / Releases)</option>
-            </select>
-          </div>
+              {/* Side Filter 4: Flat / Unit Number */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                  🚪 Flat / Unit Number:
+                </label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. 106, 612..."
+                  value={flatNumber}
+                  onChange={(e) => setFlatNumber(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: flatNumber ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                    fontWeight: flatNumber ? 700 : 400
+                  }}
+                />
+              </div>
 
-          {/* Side Filter 6: Carpet Area */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
-              📐 Carpet Area:
-            </label>
-            <select
-              className="form-control"
-              value={carpetRange}
-              onChange={(e) => setCarpetRange(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.65rem',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                background: 'var(--bg-card)',
-                color: 'var(--text-main)',
-                border: carpetRange ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                fontWeight: carpetRange ? 700 : 400
-              }}
-            >
-              <option value="">All Sizes</option>
-              <option value="0-450">&lt; 450 sq.ft (Studio/1RK)</option>
-              <option value="450-650">450 – 650 sq.ft (1 BHK)</option>
-              <option value="650-950">650 – 950 sq.ft (2 BHK)</option>
-              <option value="950-99999">&gt; 950 sq.ft (3 BHK+)</option>
-            </select>
-          </div>
+              {/* Side Filter 5: Price Range */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                  💰 Price Range:
+                </label>
+                <select
+                  className="form-control"
+                  value={priceRange}
+                  onChange={(e) => setPriceRange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: priceRange ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                    fontWeight: priceRange ? 700 : 400
+                  }}
+                >
+                  <option value="">All Prices</option>
+                  <option value="0-2500000">Under ₹ 25 Lakh</option>
+                  <option value="2500000-5000000">₹ 25 L – ₹ 50 Lakh</option>
+                  <option value="5000000-7500000">₹ 50 L – ₹ 75 Lakh</option>
+                  <option value="7500000-10000000">₹ 75 L – ₹ 1 Crore</option>
+                  <option value="10000000-9999999999">Above ₹ 1 Crore</option>
+                  <option value="0-0">₹ 0 (Gifts / Releases)</option>
+                </select>
+              </div>
+
+              {/* Side Filter 6: Carpet Area */}
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.3rem', display: 'block' }}>
+                  📐 Carpet Area:
+                </label>
+                <select
+                  className="form-control"
+                  value={carpetRange}
+                  onChange={(e) => setCarpetRange(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.65rem',
+                    borderRadius: '8px',
+                    fontSize: '0.85rem',
+                    background: 'var(--bg-card)',
+                    color: 'var(--text-main)',
+                    border: carpetRange ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                    fontWeight: carpetRange ? 700 : 400
+                  }}
+                >
+                  <option value="">All Sizes</option>
+                  <option value="0-450">&lt; 450 sq.ft (Studio/1RK)</option>
+                  <option value="450-650">450 – 650 sq.ft (1 BHK)</option>
+                  <option value="650-950">650 – 950 sq.ft (2 BHK)</option>
+                  <option value="950-99999">&gt; 950 sq.ft (3 BHK+)</option>
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Active Filter Chips bar */}

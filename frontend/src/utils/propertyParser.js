@@ -52,7 +52,27 @@ export function formatINR(val) {
   return `₹ ${num.toLocaleString('en-IN')}`;
 }
 
+export function isRealEstateRecord(rawRow) {
+  if (!rawRow || typeof rawRow !== 'object') return false;
+  return Boolean(
+    rawRow.docno || 
+    rawRow.propertydescription || 
+    rawRow.srocode || 
+    rawRow.sroname || 
+    rawRow.sellerparty || 
+    rawRow.purchaserparty || 
+    rawRow.consideration_amt !== undefined || 
+    rawRow.stampdutypaid !== undefined ||
+    rawRow.marketvalue !== undefined
+  );
+}
+
 export function enrichRow(rawRow) {
+  // If generic spreadsheet (e.g. employee, accounts, sales, inventory): preserve as-is!
+  if (!isRealEstateRecord(rawRow)) {
+    return { ...rawRow };
+  }
+
   const desc = rawRow.propertydescription || '';
   const society = rawRow.society || extractSociety(desc);
   const carpetSqft = rawRow.carpet_sqft || extractCarpetArea(desc) || '';

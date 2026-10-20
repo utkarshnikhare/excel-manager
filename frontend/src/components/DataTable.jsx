@@ -9,7 +9,7 @@ const DataTable = ({ data, onDeleteRow }) => {
   const [quickFilter, setQuickFilter] = useState('');
   const [selectedDeed, setSelectedDeed] = useState(null);
   const [hiddenCols, setHiddenCols] = useState(new Set([
-    'internaldocumentnumber', 'micrno', 'bank_type', 'party_code', 'status', 'dateofexecution'
+    'internaldocumentnumber', 'micrno', 'bank_type', 'party_code', 'status', 'dateofexecution', 'source_sheet'
   ]));
   const [showColPicker, setShowColPicker] = useState(false);
   const [displayMode, setDisplayMode] = useState('table'); // 'table' or 'cards'
@@ -17,9 +17,24 @@ const DataTable = ({ data, onDeleteRow }) => {
   // Safe data array ensuring zero hook skips or crashes
   const safeData = useMemo(() => Array.isArray(data) ? data : [], [data]);
 
-  // Extract all columns
+  // Extract all unique columns across all uploaded files (handles 50+ mixed schema files systematically)
   const allColumns = useMemo(() => {
-    return safeData.length > 0 ? Object.keys(safeData[0]) : [];
+    if (safeData.length === 0) return [];
+    const colSet = new Set();
+    const limit = Math.min(safeData.length, 1000);
+    for (let i = 0; i < limit; i++) {
+      const keys = Object.keys(safeData[i]);
+      for (let j = 0; j < keys.length; j++) {
+        colSet.add(keys[j]);
+      }
+    }
+    return Array.from(colSet);
+  }, [safeData]);
+
+  const isPropertyData = useMemo(() => {
+    if (safeData.length === 0) return false;
+    const first = safeData[0];
+    return Boolean(first.docno || first.society || first.consideration_amt || first.propertydescription);
   }, [safeData]);
 
   const visibleColumns = useMemo(() => {
@@ -116,6 +131,27 @@ const DataTable = ({ data, onDeleteRow }) => {
       return (
         <span style={{ fontWeight: 700, color: '#3b82f6' }}>
           ₹ {Number(val).toLocaleString('en-IN')}
+        </span>
+      );
+    }
+
+    // Source File badge
+    if (col === 'source_file') {
+      return (
+        <span style={{
+          background: 'rgba(59, 130, 246, 0.1)',
+          color: '#1d4ed8',
+          border: '1px solid rgba(59, 130, 246, 0.25)',
+          padding: '0.2rem 0.5rem',
+          borderRadius: '5px',
+          fontWeight: 600,
+          fontSize: '0.78rem',
+          whiteSpace: 'nowrap',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px'
+        }} title={`Originating spreadsheet: ${val}`}>
+          📁 {String(val)}
         </span>
       );
     }
@@ -384,77 +420,154 @@ const DataTable = ({ data, onDeleteRow }) => {
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#3b82f6', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
-                        Doc #{row.docno || 'N/A'}
-                      </span>
-                      <h4 style={{ margin: '0.35rem 0 0 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>
-                        {row.society || 'Residential Property'}
-                      </h4>
-                    </div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      📅 {row.registrationdate || '—'}
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.65rem' }}>
-                    {row.flat_no && (
-                      <span style={{ fontSize: '0.75rem', background: 'rgba(236, 72, 153, 0.1)', color: '#ec4899', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
-                        🚪 Flat {row.flat_no}
-                      </span>
-                    )}
-                    {row.carpet_sqft > 0 && (
-                      <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
-                        📐 {row.carpet_sqft} sq.ft
-                      </span>
-                    )}
-                    {row.docname && (
-                      <span style={{ fontSize: '0.75rem', background: 'var(--bg-main)', color: 'var(--text-muted)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
-                        📜 {row.docname}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{
-                    background: 'var(--bg-main)',
-                    padding: '0.6rem 0.75rem',
-                    borderRadius: '6px',
-                    marginBottom: '0.65rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                        Consideration
-                      </div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#10b981' }}>
-                        {formatINR(row.consideration_amt)}
-                      </div>
-                    </div>
-                    {row.rate_per_sqft > 0 && (
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                          Rate / sq.ft
+                  {isPropertyData ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#3b82f6', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                              Doc #{row.docno || 'N/A'}
+                            </span>
+                            {row.source_file && (
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: '#1d4ed8',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                padding: '0.12rem 0.45rem',
+                                borderRadius: '4px',
+                                maxWidth: '160px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }} title={`Source File: ${row.source_file}`}>
+                                📁 {row.source_file}
+                              </span>
+                            )}
+                          </div>
+                          <h4 style={{ margin: '0.2rem 0 0 0', fontSize: '0.95rem', color: 'var(--text-main)' }}>
+                            {row.society || 'Residential Property'}
+                          </h4>
                         </div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6' }}>
-                          ₹ {Number(row.rate_per_sqft).toLocaleString('en-IN')}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          📅 {row.registrationdate || '—'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                        {row.flat_no && (
+                          <span style={{ fontSize: '0.75rem', background: 'rgba(236, 72, 153, 0.1)', color: '#ec4899', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
+                            🚪 Flat {row.flat_no}
+                          </span>
+                        )}
+                        {row.carpet_sqft > 0 && (
+                          <span style={{ fontSize: '0.75rem', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
+                            📐 {row.carpet_sqft} sq.ft
+                          </span>
+                        )}
+                        {row.docname && (
+                          <span style={{ fontSize: '0.75rem', background: 'var(--bg-main)', color: 'var(--text-muted)', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                            📜 {row.docname}
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{
+                        background: 'var(--bg-main)',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: '6px',
+                        marginBottom: '0.65rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                            Consideration
+                          </div>
+                          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#10b981' }}>
+                            {formatINR(row.consideration_amt)}
+                          </div>
+                        </div>
+                        {row.rate_per_sqft > 0 && (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                              Rate / sq.ft
+                            </div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#3b82f6' }}>
+                              ₹ {Number(row.rate_per_sqft).toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.purchaserparty}>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Buyer: </span>
+                          {row.purchaserparty || '—'}
+                        </div>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.sellerparty}>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Seller: </span>
+                          {row.sellerparty || '—'}
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </>
+                  ) : (
+                    /* Systematic Generic Card for Any Data Type (Employees, Accounts, Sales, Inventory) */
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#3b82f6', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
+                              #{rowsPerPage === 'All' ? idx + 1 : (activePage - 1) * rowsPerPage + idx + 1}
+                            </span>
+                            {row.source_file && (
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 600,
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: '#1d4ed8',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                padding: '0.12rem 0.45rem',
+                                borderRadius: '4px',
+                                maxWidth: '170px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }} title={`Source File: ${row.source_file}`}>
+                                📁 {row.source_file}
+                              </span>
+                            )}
+                          </div>
+                          <h4 style={{ margin: '0.2rem 0 0 0', fontSize: '1rem', color: 'var(--text-main)', fontWeight: 700 }}>
+                            {String(row[visibleColumns[0]] || row[allColumns[0]] || `Record #${idx + 1}`)}
+                          </h4>
+                        </div>
+                      </div>
 
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.purchaserparty}>
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Buyer: </span>
-                      {row.purchaserparty || '—'}
-                    </div>
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.sellerparty}>
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Seller: </span>
-                      {row.sellerparty || '—'}
-                    </div>
-                  </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gap: '0.5rem',
+                        background: 'var(--bg-main)',
+                        padding: '0.65rem 0.75rem',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        {visibleColumns.filter(c => !['source_file', 'source_sheet', visibleColumns[0]].includes(c)).slice(0, 4).map(col => (
+                          <div key={col} style={{ overflow: 'hidden' }}>
+                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.3px' }}>
+                              {col.replace(/_/g, ' ')}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                              {String(row[col] ?? '—')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>

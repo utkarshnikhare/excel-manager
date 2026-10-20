@@ -34,7 +34,7 @@ export const transliterate = (text) => {
   return result;
 };
 
-// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f, dny=jny=gy=jn)
+// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f, dny=jny=gy=jn, th=t, dh=d, bh=b)
 // Preserves word boundaries (spaces) to prevent false-positive cross-word bleed
 export const getSkeleton = (text) => {
   if (!text) return "";
@@ -44,12 +44,25 @@ export const getSkeleton = (text) => {
     .replace(/ph/g, 'f')
     .replace(/w/g, 'v')
     .replace(/sh/g, 's')
+    .replace(/th/g, 't')
+    .replace(/dh/g, 'd')
+    .replace(/bh/g, 'b')
+    .replace(/kh/g, 'k')
+    .replace(/gh/g, 'g')
     .replace(/[aeiouy]/g, '')
     .replace(/[^a-z\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   return normalized.replace(/([a-z])\1+/g, '$1'); 
+};
+
+export const cleanParty = (str) => {
+  return transliterate(String(str || ''))
+    .toLowerCase()
+    .replace(/^[\d\.\-\)\s]+/, '')
+    .replace(/^(shri|sri|smt|mr|mrs|dr|adv|ms|advocate)\.?\s+/i, '')
+    .trim();
 };
 
 export const levenshtein = (a, b) => {
@@ -91,7 +104,7 @@ export const hashRecord = (row) => {
 // Target text fields for global search to avoid scanning numeric garbage
 const searchableColumns = [
   'sellerparty', 'purchaserparty', 'propertydescription', 'docno',
-  'society', 'flat_no', 'docname', 'sroname', 'areaname', 'registrationdate'
+  'society', 'flat_no', 'docname', 'sroname', 'areaname', 'registrationdate', 'source_file'
 ];
 
 // Pre-indexed search representation on the row (cached lazily & non-enumerable)
@@ -126,7 +139,38 @@ export const getRowSearchBlob = (row) => {
 
 const checkSingleCell = (cellValue, prep) => {
   if (cellValue === null || cellValue === undefined || cellValue === '') return false;
-  const rawCell = String(cellValue).toLowerCase();
+  const rawCell = String(cellValue).toLowerCase().trim();
+
+  // Strict file matching for source file filters
+  if (prep.column === 'source_file') {
+    return rawCell === prep.rawQuery || rawCell.includes(prep.rawQuery);
+  }
+
+  // If Exact Match is requested (either prep.isExact is true or query had quotes)
+  if (prep.isExact) {
+    // If checking dates (e.g. year "2024" matching "15/04/2024")
+    if (prep.column === 'registrationdate' || /^\d{4}$/.test(prep.rawQuery)) {
+      if (rawCell.includes(prep.rawQuery)) return true;
+    }
+
+    const qClean = prep.queryTransClean;
+    const qSkel = prep.querySkelClean;
+    const cellClean = cleanParty(rawCell);
+
+    // 1. Direct whole cell equality
+    if (cellClean === qClean) return true;
+    if (qSkel.length > 2 && getSkeleton(cellClean) === qSkel) return true;
+
+    // 2. Individual party equality (for multi-person cells e.g. "1) Person A 2) Person B")
+    const parties = rawCell.split(/(?:\d+\)\s*|,|\n|;)/).map(p => p.trim()).filter(Boolean);
+    for (let p of parties) {
+      const pClean = cleanParty(p);
+      if (pClean === qClean) return true;
+      if (qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
+    }
+
+    return false;
+  }
 
   // Tier 0: Direct Raw Match (Instant substring check)
   if (rawCell.includes(prep.rawQuery)) return true;
@@ -203,7 +247,7 @@ export const warmSearchIndex = (dataset) => {
   processBatch();
 };
 
-export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') => {
+export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', isGlobalExact = false) => {
   const activeCriteria = criteriaList.filter(c => {
     if (c.isRange) return true;
     return c.column && String(c.query || '').trim() !== "";
@@ -221,9 +265,19 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
       };
     }
 
-    const rawQuery = String(c.query).trim().toLowerCase();
+    let rawQuery = String(c.query).trim().toLowerCase();
+    let hasQuotes = (rawQuery.startsWith('"') && rawQuery.endsWith('"')) || (rawQuery.startsWith("'") && rawQuery.endsWith("'"));
+    if (hasQuotes) {
+      rawQuery = rawQuery.slice(1, -1).trim();
+    }
+
+    const isPartyCol = !c.column || c.column === 'ALL' || c.column === '_ALL_' || /party|name|person|seller|purchaser/i.test(c.column);
+    const isExact = Boolean(hasQuotes || c.isExact || (isGlobalExact && isPartyCol));
+
     const queryTrans = transliterate(rawQuery);
+    const queryTransClean = cleanParty(rawQuery);
     const querySkel = getSkeleton(queryTrans);
+    const querySkelClean = getSkeleton(queryTransClean);
     const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
     const queryWordMeta = queryWords.map(w => ({
       word: w,
@@ -235,9 +289,12 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
       column: c.column,
       rawQuery,
       queryTrans,
+      queryTransClean,
       querySkel,
+      querySkelClean,
       queryWords,
       queryWordMeta,
+      isExact,
       isGlobal: c.column === 'ALL' || c.column === '_ALL_'
     };
   });
@@ -253,6 +310,14 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
       }
 
       if (prep.isGlobal) {
+        if (prep.isExact) {
+          for (let i = 0; i < searchableColumns.length; i++) {
+            const col = searchableColumns[i];
+            if (row[col] && checkSingleCell(row[col], prep)) return true;
+          }
+          return false;
+        }
+
         const blob = getRowSearchBlob(row);
         // Tier 0: Direct Raw Substring in whole row blob
         if (blob.rawBlob.includes(prep.rawQuery)) return true;
