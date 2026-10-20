@@ -10,7 +10,7 @@ const devanagariMap = {
   'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u', 'ृ': 'r', 'े': 'e', 'ै': 'e', 'ो': 'o', 'ौ': 'o', 'ं': 'n', 'ः': 'h', '्': ''
 };
 
-const transliterate = (text) => {
+export const transliterate = (text) => {
   let result = "";
   for (let char of String(text).toLowerCase()) {
     result += devanagariMap[char] || char;
@@ -18,12 +18,12 @@ const transliterate = (text) => {
   return result;
 };
 
-const getSkeleton = (text) => {
+export const getSkeleton = (text) => {
   let skel = text.replace(/[aeiouy\W0-9_]/g, '');
   return skel.replace(/(.)\1+/g, '$1'); 
 };
 
-const levenshtein = (a, b) => {
+export const levenshtein = (a, b) => {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
   const matrix = [];
@@ -46,27 +46,32 @@ const levenshtein = (a, b) => {
   return matrix[b.length][a.length];
 };
 
-export const executeSmartSearch = (masterData, criteriaList) => {
+export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') => {
   const activeCriteria = criteriaList.filter(c => c.column && c.query.trim() !== "");
   
   if (activeCriteria.length === 0) return [];
 
   return masterData.filter(row => {
-    return activeCriteria.every(criteria => {
-      const cellValue = String(row[criteria.column] || "");
+    const checkCriteria = (criteria) => {
+      const cellValue = String(row[criteria.column] ?? "");
+      const rawQuery = String(criteria.query).trim().toLowerCase();
+      const rawCell = cellValue.trim().toLowerCase();
+
+      // Tier 0: Direct Raw Match (Critical for Phone numbers, IDs, Numbers, Exact matches)
+      if (rawCell.includes(rawQuery)) return true;
+
       const queryTrans = transliterate(criteria.query);
       const querySkel = getSkeleton(queryTrans);
       const cellTrans = transliterate(cellValue);
       const cellSkel = getSkeleton(cellTrans);
       
-      // Tier 1: Fast Exact Substring Match
+      // Tier 1: Fast Transliterated Substring Match
       if (cellTrans.includes(queryTrans)) return true;
 
       // Tier 2: Fast Phonetic Substring Match (Handles words without spaces)
-      if (querySkel.length > 0 && cellSkel.includes(querySkel)) return true;
+      if (querySkel.length > 1 && cellSkel.includes(querySkel)) return true;
 
-      // Tier 3: Smart Phrase Matcher (Fixes the "tripati" and "vardas" sentence issue)
-      // Breaks the search into individual words
+      // Tier 3: Smart Phrase Matcher (Multi-word names & typo tolerance)
       const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
       const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
 
@@ -86,15 +91,15 @@ export const executeSmartSearch = (masterData, criteriaList) => {
 
             const cWordSkel = getSkeleton(cWord);
             
-            // Substring skeleton match
-            if (qWordSkel.length > 0 && cWordSkel.includes(qWordSkel)) { 
+            // Substring skeleton match (for words >= 2 consonants)
+            if (qWordSkel.length > 1 && cWordSkel.includes(qWordSkel)) { 
               wordMatched = true; 
               break; 
             }
 
-            // Typo match (slightly more forgiving algorithm)
-            if (qWordSkel.length > 0 && cWordSkel.length > 0) {
-              const maxTypos = Math.max(1, Math.ceil(qWordSkel.length / 3));
+            // Typo match (requires at least 3 consonants to avoid noisy false positives)
+            if (qWordSkel.length >= 3 && cWordSkel.length >= 3) {
+              const maxTypos = Math.max(1, Math.floor(qWordSkel.length / 3));
               if (levenshtein(qWordSkel, cWordSkel) <= maxTypos) {
                 wordMatched = true; 
                 break;
@@ -104,13 +109,16 @@ export const executeSmartSearch = (masterData, criteriaList) => {
           if (wordMatched) matchedWordsCount++;
         }
 
-        // If at least 75% of the typed words match, consider it a successful row match!
-        // E.g., If you type 6 words, and 5 match, it pulls the row.
         const requiredMatches = Math.ceil(queryWords.length * 0.75);
         if (matchedWordsCount >= requiredMatches) return true;
       }
       
       return false; 
-    });
+    };
+
+    if (matchMode === 'OR') {
+      return activeCriteria.some(checkCriteria);
+    }
+    return activeCriteria.every(checkCriteria);
   });
 };

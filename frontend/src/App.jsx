@@ -24,15 +24,13 @@ function App() {
     setIsDone(false);
   };
 
-  // NEW LOGIC: Handles the 3 different set operations
+  // Handles the 3 different set operations
   const handleProcessResults = (action, newResults) => {
     if (action === 'INITIAL_ADD' || action === 'OVERWRITE') {
-      // Overwrite: Replaces everything with the new search
       const uniqueSet = new Set(newResults.map(row => JSON.stringify(row)));
       setStagedData(Array.from(uniqueSet).map(str => JSON.parse(str)));
       
     } else if (action === 'APPEND') {
-      // Append: Adds new results to existing, filtering out duplicates
       setStagedData(prevData => {
         const combined = [...prevData, ...newResults];
         const uniqueSet = new Set(combined.map(row => JSON.stringify(row)));
@@ -40,7 +38,6 @@ function App() {
       });
       
     } else if (action === 'RETAIN') {
-      // Retain: Keeps ONLY the overlapping records (Intersection)
       setStagedData(prevData => {
         const prevSet = new Set(prevData.map(row => JSON.stringify(row)));
         const common = newResults.filter(row => prevSet.has(JSON.stringify(row)));
@@ -50,12 +47,37 @@ function App() {
     }
   };
 
+  const handleDeleteRow = (rowToDelete) => {
+    const targetStr = JSON.stringify(rowToDelete);
+    setStagedData(prev => prev.filter(r => JSON.stringify(r) !== targetStr));
+  };
+
+  const handleClearStaged = () => {
+    if (window.confirm("Are you sure you want to clear all records from the temporary file?")) {
+      setStagedData([]);
+    }
+  };
+
   const handleExportExcel = () => {
     if (stagedData.length === 0) return;
     const worksheet = XLSX.utils.json_to_sheet(stagedData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Compiled Data");
     XLSX.writeFile(workbook, "Filtered_Records.xlsx");
+  };
+
+  const handleExportCSV = () => {
+    if (stagedData.length === 0) return;
+    const worksheet = XLSX.utils.json_to_sheet(stagedData);
+    const csvOutput = XLSX.utils.sheet_to_csv(worksheet);
+    const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "Filtered_Records.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -82,25 +104,37 @@ function App() {
               <>
                 <SearchPanel 
                   masterData={masterData} 
-                  stagedData={stagedData} // PASSING FULL STAGED DATA HERE
+                  stagedData={stagedData}
                   onProcessResults={handleProcessResults}
                   onDone={() => setIsDone(true)}
                 />
 
                 {stagedData.length > 0 && (
                   <div className="card">
-                    <h3 style={{marginBottom: '1rem'}}>Current Temporary File ({stagedData.length} Unique Records)</h3>
-                    <DataTable data={stagedData} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <h3 style={{ margin: 0 }}>Current Workspace ({stagedData.length} Unique Records)</h3>
+                      <button 
+                        className="btn btn-outline" 
+                        onClick={handleClearStaged}
+                        style={{ color: '#ef4444', borderColor: '#ef4444', fontSize: '0.85rem' }}
+                      >
+                        🗑️ Clear All
+                      </button>
+                    </div>
+                    <DataTable data={stagedData} onDeleteRow={handleDeleteRow} />
                   </div>
                 )}
               </>
             ) : (
               <div className="prompt-box alert-info" style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '2rem' }}>
-                <h2>🏁 FINAL RESULT</h2>
-                <p>You have compiled <strong>{stagedData.length}</strong> unique records.</p>
-                <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+                <h2>🏁 WORKFLOW COMPLETED</h2>
+                <p>You have compiled <strong>{stagedData.length}</strong> unique records ready for export.</p>
+                <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                   <button className="btn btn-primary" onClick={handleExportExcel} disabled={stagedData.length === 0}>
-                    📥 DOWNLOAD EXCEL
+                    📥 Download Excel (.xlsx)
+                  </button>
+                  <button className="btn btn-outline" onClick={handleExportCSV} disabled={stagedData.length === 0}>
+                    📄 Download CSV (.csv)
                   </button>
                   <button className="btn btn-outline" onClick={() => setIsDone(false)}>
                     ⬅ Back to Search
