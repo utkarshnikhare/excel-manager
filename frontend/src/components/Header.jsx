@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ theme, toggleTheme }) => {
+const Header = ({ theme, toggleTheme, onGoHome, hasData }) => {
   return (
     <header className="app-header" style={{
       display: 'flex',
@@ -11,7 +11,16 @@ const Header = ({ theme, toggleTheme }) => {
       borderBottom: '1px solid var(--border-color)',
       boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div 
+        onClick={hasData ? onGoHome : undefined}
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '12px',
+          cursor: hasData ? 'pointer' : 'default'
+        }}
+        title={hasData ? 'Click to return to home upload screen' : ''}
+      >
         <div style={{
           width: '36px',
           height: '36px',
@@ -59,6 +68,23 @@ const Header = ({ theme, toggleTheme }) => {
       </div>
       
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {hasData && (
+          <button
+            onClick={onGoHome}
+            className="btn btn-outline"
+            style={{
+              fontSize: '0.85rem',
+              padding: '0.4rem 0.8rem',
+              color: '#3b82f6',
+              borderColor: '#3b82f6',
+              fontWeight: 600,
+              background: 'rgba(59, 130, 246, 0.08)'
+            }}
+            title="Return to file upload screen"
+          >
+            ⬅ Back to Upload
+          </button>
+        )}
         <a 
           href="https://github.com/utkarshnikhare/excel-manager" 
           target="_blank" 

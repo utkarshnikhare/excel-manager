@@ -12,7 +12,7 @@ export function extractSociety(desc) {
   if (/मॅजेस्टिक|majestic/i.test(str)) return 'Majestic';
   if (/मोझे|moze/i.test(str)) return 'Moze Associates';
   if (/सदनिका|फ्लॅट|फलॅट|flat/i.test(str)) return 'Residential Flat';
-  return 'Lohgaon Property';
+  return 'Residential Property';
 }
 
 export function extractCarpetArea(desc) {

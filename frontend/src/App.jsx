@@ -179,7 +179,12 @@ function App() {
 
   return (
     <div className="app-layout">
-      <Header theme={theme} toggleTheme={toggleTheme} />
+      <Header 
+        theme={theme} 
+        toggleTheme={toggleTheme} 
+        hasData={!!masterData}
+        onGoHome={() => { setMasterData(null); setFileMeta(null); setActiveSociety(''); }}
+      />
 
       <main className="main-content">
         <ErrorBoundary>
@@ -271,9 +276,20 @@ function App() {
                 <button 
                   className="btn btn-outline" 
                   onClick={() => { setMasterData(null); setFileMeta(null); setActiveSociety(''); }}
-                  style={{ fontSize: '0.85rem', padding: '0.35rem 0.75rem' }}
+                  style={{ 
+                    fontSize: '0.85rem', 
+                    padding: '0.35rem 0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    fontWeight: 600,
+                    color: '#3b82f6',
+                    borderColor: '#3b82f6',
+                    background: 'rgba(59, 130, 246, 0.08)'
+                  }}
+                  title="Go back to the upload screen or load another spreadsheet"
                 >
-                  📁 Change File
+                  ⬅ Back to Upload
                 </button>
               </div>
             </div>

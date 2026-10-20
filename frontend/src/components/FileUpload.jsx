@@ -125,11 +125,11 @@ const FileUpload = ({ onDataParsed }) => {
     }
   };
 
-  // Demo 1: Maharashtra IGR Real Property Records (3,498 Genuine Records)
+  // Demo 1: Real Property Records (3,498 Genuine Records)
   const loadPropertyData = async () => {
     setError('');
     setIsLoading(true);
-    setStatusMessage('Loading 3,498 Lohgaon property records...');
+    setStatusMessage('Loading 3,500 real estate property records...');
 
     try {
       // 1. Try fetching lohgaon_deeds.json for ultra-fast load
@@ -161,7 +161,7 @@ const FileUpload = ({ onDataParsed }) => {
           workbook: null,
           sheetNames: ['All_3500_Deeds'],
           activeSheet: 'All_3500_Deeds',
-          fileName: 'Lohgaon_Property_Records.xlsx'
+          fileName: 'Sample_Real_Estate_Records.xlsx'
         });
         return;
       }
@@ -200,12 +200,12 @@ const FileUpload = ({ onDataParsed }) => {
           workbook: wb,
           sheetNames,
           activeSheet: firstSheet,
-          fileName: 'Lohgaon_Property_Records.xlsx'
+          fileName: 'Sample_Real_Estate_Records.xlsx'
         });
         return;
       }
 
-      throw new Error('Could not fetch Lohgaon property dataset. Please ensure file exists.');
+      throw new Error('Could not fetch sample property dataset. Please ensure file exists.');
 
     } catch (err) {
       console.error('Demo loading error:', err);
@@ -327,7 +327,7 @@ const FileUpload = ({ onDataParsed }) => {
             onClick={loadPropertyData}
             style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
           >
-            🏛️ Load Lohgaon Property Records (3,498 Real Deeds)
+            🏛️ Load Sample Real Estate Records (3,500 Deeds)
           </button>
           <button 
             className="btn btn-outline" 

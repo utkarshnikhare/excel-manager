@@ -74,7 +74,7 @@ const DeedDetailModal = ({ deed, onClose }) => {
               </span>
             </div>
             <h2 style={{ margin: '0.5rem 0 0.2rem 0', fontSize: '1.35rem' }}>
-              {deed.society || 'Lohgaon Property Record'}
+              {deed.society || 'Verified Property Record'}
             </h2>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               🏛️ {deed.sroname || 'Sub-Registrar Office'} • {deed.areaname || 'लोहगांव'} (Survey No. 284)
