@@ -37,7 +37,7 @@ const FileUpload = ({ onDataParsed }) => {
           const data = new Uint8Array(e.target.result);
           workbook = XLSX.read(data, { type: 'array', cellDates: true });
         } catch (binaryErr) {
-          // Strategy 2: Fallback for CSV or HTML-table exports saved as .xls
+          // Strategy 2: Fallback for CSV or HTML-table exports saved as .xls (e.g. Maharashtra IGR)
           try {
             const textDecoder = new TextDecoder('utf-8');
             const text = textDecoder.decode(e.target.result);
@@ -91,8 +91,136 @@ const FileUpload = ({ onDataParsed }) => {
     reader.readAsArrayBuffer(file);
   };
 
-  // Demo sample data for instant testing
-  const loadSampleData = () => {
+  // Demo 1: Maharashtra IGR Real Property Records
+  const loadPropertyData = () => {
+    setError('');
+    setIsLoading(true);
+
+    const propertyRecords = [
+      {
+        srocode: 3,
+        docno: 16060,
+        docname: "गहाणखत",
+        registrationdate: "12/10/2023",
+        sroname: "सह दु.नि. हवेली 3",
+        sellerparty: "सौ श्लेषा अविनाश भोसले, श्री अविनाश चंद्रकांत भोसले",
+        purchaserparty: "ज्ञानदीप को ऑप क्रेडिट सोसायटी लि मुंबई",
+        propertydescription: "लोहगांव स. नं. 284 हि. नं. 3 व 4 स्कायवेज एस्फेरा 2 विंग ए 106",
+        areaname: "लोहगांव",
+        consideration_amt: 3000000,
+        marketvalue: 0,
+        stampdutypaid: 9000,
+        registrationfees: 15000
+      },
+      {
+        srocode: 4,
+        docno: 17762,
+        docname: "असाईनमेंट डीड",
+        registrationdate: "20/09/2023",
+        sroname: "सह दु.नि. हवेली 4",
+        sellerparty: "रीना जोसेफ, मारिया जोसेफ क्रिस्टोफर",
+        purchaserparty: "योगेश सुभाष कळंबे",
+        propertydescription: "लोहगाव सर्व्हे नं. 284 हिस्सा नं. 7 एरोपोलीस इ विंग फ्लॅट 612",
+        areaname: "लोहगांव",
+        consideration_amt: 6500000,
+        marketvalue: 4854982,
+        stampdutypaid: 455000,
+        registrationfees: 30000
+      },
+      {
+        srocode: 8,
+        docno: 12046,
+        docname: "करारनामा",
+        registrationdate: "06/01/2023",
+        sroname: "सह दु.नि. हवेली 8",
+        sellerparty: "मे मोझे असोसिएटस तर्फे भागीदार अजय नामदेव मोझे",
+        purchaserparty: "शोभा कुमारी, जितेंद्र कुमार",
+        propertydescription: "लोहगांव स नं 284 हि नं 3 व 4 स्कायवेज एस्फेरा बी विंग फ्लॅट 504",
+        areaname: "लोहगांव",
+        consideration_amt: 3399120,
+        marketvalue: 2621293,
+        stampdutypaid: 238000,
+        registrationfees: 30000
+      },
+      {
+        srocode: 8,
+        docno: 3027,
+        docname: "ट्रान्सफर डीड",
+        registrationdate: "17/02/2023",
+        sroname: "सह दु.नि. हवेली 8",
+        sellerparty: "ध्रुव रमेशलाल अरोरा",
+        purchaserparty: "रोहन त्रिभुवन शाह, नितिशा रोहन शाह",
+        propertydescription: "लोहगाव सर्वे नं. 284/2 प्राईड आशियाना को ऑप हौसिंग इमारत इ-2 फ्लॅट 1102",
+        areaname: "लोहगांव",
+        consideration_amt: 7400000,
+        marketvalue: 6619093,
+        stampdutypaid: 518000,
+        registrationfees: 30000
+      },
+      {
+        srocode: 8,
+        docno: 6609,
+        docname: "करारनामा",
+        registrationdate: "12/04/2023",
+        sroname: "सह दु.नि. हवेली 8",
+        sellerparty: "नितीन बबन मोझे",
+        purchaserparty: "वैभव किसनराव कुडके",
+        propertydescription: "लोहगांव स नं 284 स्कायवेज एस्फेरा 2 विंग ए 1110",
+        areaname: "लोहगांव",
+        consideration_amt: 5800275,
+        marketvalue: 4039973,
+        stampdutypaid: 406100,
+        registrationfees: 30000
+      },
+      {
+        srocode: 8,
+        docno: 14065,
+        docname: "असाईनमेंट डीड",
+        registrationdate: "04/07/2024",
+        sroname: "सह दु.नि. हवेली 8",
+        sellerparty: "राजीव कुमार विग, अंजू विग",
+        purchaserparty: "विवेक कुमार खरे, आकांक्षा खरे",
+        propertydescription: "लोहगाव सर्वे नं. 284 प्राईड आशियाना को ऑप हौसिंग जी-3 फ्लॅट 903",
+        areaname: "लोहगांव",
+        consideration_amt: 10000000,
+        marketvalue: 6529512,
+        stampdutypaid: 700000,
+        registrationfees: 30000
+      },
+      {
+        srocode: 1,
+        docno: 25891,
+        docname: "करारनामा",
+        registrationdate: "20/11/2025",
+        sroname: "सह दु.नि.हवेली 1",
+        sellerparty: "सौ. लिना किशोर जोशी",
+        purchaserparty: "ऐश्वर्या सुरेश नलावडे, शुभम राजेश पाखरे",
+        propertydescription: "लोहगांव सर्वे नं. 284 हिस्सा नं. 4 एरोपोलीस फेज 01 विंग ए 1105",
+        areaname: "लोहगांव",
+        consideration_amt: 6000000,
+        marketvalue: 5281162,
+        stampdutypaid: 420000,
+        registrationfees: 30000
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(propertyRecords);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Lohgaon_284_Deeds");
+
+    setIsLoading(false);
+
+    onDataParsed({
+      data: propertyRecords,
+      workbook: wb,
+      sheetNames: ["Lohgaon_284_Deeds"],
+      activeSheet: "Lohgaon_284_Deeds",
+      fileName: "Lohgaon_Property_Records.xlsx"
+    });
+  };
+
+  // Demo 2: Standard Employee Dataset
+  const loadEmployeeData = () => {
     setError('');
     setIsLoading(true);
 
@@ -102,13 +230,7 @@ const FileUpload = ({ onDataParsed }) => {
       { "ID": "EMP-103", "Name": "Amit Verma", "Hindi Name": "अमित वर्मा", "City": "Delhi", "Department": "Sales", "Phone": "9811122334", "Status": "Pending" },
       { "ID": "EMP-104", "Name": "Sneha Kulkarni", "Hindi Name": "स्नेहा कुलकर्णी", "City": "Pune", "Department": "Engineering", "Phone": "9820077889", "Status": "Active" },
       { "ID": "EMP-105", "Name": "Vishal Thombre", "Hindi Name": "विशाल ठोंबरे", "City": "Nashik", "Department": "Marketing", "Phone": "9890011223", "Status": "Active" },
-      { "ID": "EMP-106", "Name": "Utkarsh Nikhare", "Hindi Name": "उत्कर्ष निखारे", "City": "Nagpur", "Department": "Operations", "Phone": "9823344556", "Status": "Active" },
-      { "ID": "EMP-107", "Name": "Priya Deshmukh", "Hindi Name": "प्रिया देशमुख", "City": "Mumbai", "Department": "Human Resources", "Phone": "9821199887", "Status": "Inactive" },
-      { "ID": "EMP-108", "Name": "Suresh Gupta", "Hindi Name": "सुरेश गुप्ता", "City": "Delhi", "Department": "Engineering", "Phone": "9810055443", "Status": "Active" },
-      { "ID": "EMP-109", "Name": "Ananya Joshi", "Hindi Name": "अनन्या जोशी", "City": "Pune", "Department": "Engineering", "Phone": "9822233445", "Status": "Active" },
-      { "ID": "EMP-110", "Name": "Rohan Mehta", "Hindi Name": "रोहन मेहता", "City": "Ahmedabad", "Department": "Sales", "Phone": "9879911223", "Status": "Pending" },
-      { "ID": "EMP-111", "Name": "Deepak Shinde", "Hindi Name": "दीपक शिंदे", "City": "Mumbai", "Department": "Support", "Phone": "9820066778", "Status": "Active" },
-      { "ID": "EMP-112", "Name": "Kavita Rao", "Hindi Name": "कविता राव", "City": "Bengaluru", "Department": "Engineering", "Phone": "9845012345", "Status": "Active" }
+      { "ID": "EMP-106", "Name": "Utkarsh Nikhare", "Hindi Name": "उत्कर्ष निखारे", "City": "Nagpur", "Department": "Operations", "Phone": "9823344556", "Status": "Active" }
     ];
 
     const ws = XLSX.utils.json_to_sheet(demoRecords);
@@ -157,7 +279,7 @@ const FileUpload = ({ onDataParsed }) => {
         📂 Load Spreadsheet Data
       </h2>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', textAlign: 'left' }}>
-        Upload your spreadsheet to begin searching. Supports standard .xlsx, .xls, and .csv files.
+        Upload your spreadsheet to begin searching. Supports .xlsx, .xls, and .csv with multi-sheet tab switching.
       </p>
 
       <div 
@@ -197,18 +319,27 @@ const FileUpload = ({ onDataParsed }) => {
         )}
       </div>
 
-      {/* Instant Demo Sample Data Option */}
+      {/* Instant Demo Sample Data Options */}
       <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-          Don't have an Excel file right now?
+          Instant Test with Pre-Loaded Data:
         </p>
-        <button 
-          className="btn btn-outline" 
-          onClick={loadSampleData}
-          style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
-        >
-          ✨ Load Demo Sample Data (Instant Test)
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button 
+            className="btn btn-primary" 
+            onClick={loadPropertyData}
+            style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+          >
+            🏛️ Load Lohgaon Property Records (Real Data)
+          </button>
+          <button 
+            className="btn btn-outline" 
+            onClick={loadEmployeeData}
+            style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+          >
+            👥 Load Employee Records
+          </button>
+        </div>
       </div>
 
       {error && (
