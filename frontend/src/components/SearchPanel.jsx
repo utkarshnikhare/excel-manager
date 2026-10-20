@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { executeSmartSearch } from '../utils/searchLogic';
 import DataTable from './DataTable';
 
-const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone }) => {
+const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externalFilter }) => {
   const columns = masterData && masterData.length > 0 ? Object.keys(masterData[0]) : [];
   const defaultCol = columns.length > 0 ? columns[0] : '';
 
@@ -12,6 +12,15 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone }) => {
   const [matchMode, setMatchMode] = useState('AND'); // 'AND' or 'OR'
   const [pendingResults, setPendingResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Sync external filter (e.g. from KPIDashboard society clicks)
+  useEffect(() => {
+    if (externalFilter && externalFilter.column) {
+      setConditions([
+        { column: externalFilter.column, query: externalFilter.query || '' }
+      ]);
+    }
+  }, [externalFilter]);
 
   const debounceTimerRef = useRef(null);
 

@@ -1,25 +1,33 @@
 import React, { useState, useMemo } from 'react';
+import DeedDetailModal from './DeedDetailModal';
+import { formatINR } from '../utils/propertyParser';
 
 const DataTable = ({ data, onDeleteRow }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [quickFilter, setQuickFilter] = useState('');
+  const [selectedDeed, setSelectedDeed] = useState(null);
+  const [hiddenCols, setHiddenCols] = useState(new Set([
+    'internaldocumentnumber', 'micrno', 'bank_type', 'party_code', 'status', 'dateofexecution'
+  ]));
+  const [showColPicker, setShowColPicker] = useState(false);
 
   if (!data || data.length === 0) {
     return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem' }}>No records to display.</p>;
   }
 
-  const columns = Object.keys(data[0] || {});
+  const allColumns = Object.keys(data[0] || {});
+  const visibleColumns = allColumns.filter(c => !hiddenCols.has(c));
 
   // 1. Quick in-table filter
   const filteredData = useMemo(() => {
     if (!quickFilter.trim()) return data;
     const q = quickFilter.toLowerCase();
     return data.filter(row =>
-      columns.some(col => String(row[col] ?? '').toLowerCase().includes(q))
+      allColumns.some(col => String(row[col] ?? '').toLowerCase().includes(q))
     );
-  }, [data, columns, quickFilter]);
+  }, [data, allColumns, quickFilter]);
 
   // 2. Multi-type Column Sorting (Numbers vs Text)
   const sortedData = useMemo(() => {
@@ -67,9 +75,113 @@ const DataTable = ({ data, onDeleteRow }) => {
     return sortConfig.direction === 'asc' ? ' ▲' : ' ▼';
   };
 
+  const toggleCol = (col) => {
+    setHiddenCols(prev => {
+      const next = new Set(prev);
+      if (next.has(col)) {
+        next.delete(col);
+      } else {
+        next.add(col);
+      }
+      return next;
+    });
+  };
+
+  // Helper for cell rendering
+  const renderCellContent = (col, val, row) => {
+    if (val === undefined || val === null || val === '') return '—';
+
+    // Currency values
+    if (['consideration_amt', 'marketvalue', 'stampdutypaid', 'registrationfees'].includes(col)) {
+      return (
+        <span style={{ fontWeight: 600, color: col === 'consideration_amt' ? '#10b981' : 'var(--text-main)' }}>
+          {formatINR(val)}
+        </span>
+      );
+    }
+
+    // Rate per sqft
+    if (col === 'rate_per_sqft') {
+      return (
+        <span style={{ fontWeight: 700, color: '#3b82f6' }}>
+          ₹ {Number(val).toLocaleString('en-IN')}
+        </span>
+      );
+    }
+
+    // Society badge
+    if (col === 'society') {
+      return (
+        <span style={{
+          background: 'rgba(59, 130, 246, 0.12)',
+          color: '#3b82f6',
+          padding: '0.2rem 0.5rem',
+          borderRadius: '4px',
+          fontWeight: 700,
+          fontSize: '0.8rem',
+          whiteSpace: 'nowrap'
+        }}>
+          {String(val)}
+        </span>
+      );
+    }
+
+    // Doc name badge
+    if (col === 'docname') {
+      return (
+        <span style={{
+          background: 'rgba(16, 185, 129, 0.12)',
+          color: '#10b981',
+          padding: '0.2rem 0.5rem',
+          borderRadius: '4px',
+          fontWeight: 600,
+          fontSize: '0.8rem',
+          whiteSpace: 'nowrap'
+        }}>
+          {String(val)}
+        </span>
+      );
+    }
+
+    // Doc number clickable
+    if (col === 'docno') {
+      return (
+        <button
+          onClick={() => setSelectedDeed(row)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#3b82f6',
+            fontWeight: 700,
+            cursor: 'pointer',
+            padding: 0,
+            textDecoration: 'underline'
+          }}
+          title="Click to view full Index-II deed summary"
+        >
+          #{val}
+        </button>
+      );
+    }
+
+    // Long description truncation
+    if (col === 'propertydescription' || col === 'sellerparty' || col === 'purchaserparty') {
+      const s = String(val);
+      if (s.length > 50) {
+        return (
+          <span title={s} style={{ cursor: 'pointer' }} onClick={() => setSelectedDeed(row)}>
+            {s.slice(0, 50)}...
+          </span>
+        );
+      }
+    }
+
+    return String(val);
+  };
+
   return (
     <div className="datatable-container" style={{ marginTop: '0.5rem' }}>
-      {/* Top Bar: Rows Per Page & Quick Filter */}
+      {/* Top Bar: Rows Per Page & Quick Filter & Column Customizer */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -78,37 +190,83 @@ const DataTable = ({ data, onDeleteRow }) => {
         gap: '0.75rem',
         marginBottom: '1rem'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <label style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Show</label>
-          <select
-            value={rowsPerPage}
-            onChange={(e) => {
-              const val = e.target.value === 'All' ? 'All' : Number(e.target.value);
-              setRowsPerPage(val);
-              setCurrentPage(1);
-            }}
-            style={{
-              padding: '0.4rem 0.6rem',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color)',
-              background: 'var(--bg-card)',
-              color: 'var(--text-main)',
-              cursor: 'pointer'
-            }}
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value="All">All</option>
-          </select>
-          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>records per page</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Show</label>
+            <select
+              value={rowsPerPage}
+              onChange={(e) => {
+                const val = e.target.value === 'All' ? 'All' : Number(e.target.value);
+                setRowsPerPage(val);
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: '0.35rem 0.5rem',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-main)',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value="All">All ({totalEntries})</option>
+            </select>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>rows</span>
+          </div>
+
+          {/* Column Toggle Dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowColPicker(prev => !prev)}
+              className="btn btn-outline"
+              style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem' }}
+            >
+              👁️ Columns ({visibleColumns.length}/{allColumns.length})
+            </button>
+
+            {showColPicker && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                marginTop: '0.4rem',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '0.75rem',
+                boxShadow: 'var(--shadow-md)',
+                zIndex: 100,
+                width: '240px',
+                maxHeight: '260px',
+                overflowY: 'auto'
+              }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                  TOGGLE COLUMNS
+                </div>
+                {allColumns.map(col => (
+                  <label key={col} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!hiddenCols.has(col)}
+                      onChange={() => toggleCol(col)}
+                    />
+                    <span style={{ textTransform: 'capitalize' }}>{col.replace(/_/g, ' ')}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div>
           <input
             type="text"
-            placeholder="🔍 Quick filter in table..."
+            placeholder="🔍 In-table filter (e.g. Esfera, 16060, Flat 504)..."
             value={quickFilter}
             onChange={(e) => {
               setQuickFilter(e.target.value);
@@ -120,8 +278,8 @@ const DataTable = ({ data, onDeleteRow }) => {
               border: '1px solid var(--border-color)',
               background: 'var(--bg-card)',
               color: 'var(--text-main)',
-              fontSize: '0.9rem',
-              minWidth: '220px'
+              fontSize: '0.85rem',
+              minWidth: '260px'
             }}
           />
         </div>
@@ -132,27 +290,30 @@ const DataTable = ({ data, onDeleteRow }) => {
         <table className="excel-table modern-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-card)', zIndex: 1, borderBottom: '2px solid var(--border-color)' }}>
             <tr>
-              <th style={{ padding: '0.6rem 0.8rem', width: '50px' }}>#</th>
-              {columns.map(col => (
+              <th style={{ padding: '0.6rem 0.8rem', width: '45px', textAlign: 'center' }}>#</th>
+              <th style={{ padding: '0.6rem 0.8rem', width: '90px', textAlign: 'center' }}>Details</th>
+              {visibleColumns.map(col => (
                 <th
                   key={col}
                   onClick={() => handleSort(col)}
                   style={{
-                    padding: '0.6rem 1rem',
+                    padding: '0.6rem 0.9rem',
                     cursor: 'pointer',
                     userSelect: 'none',
-                    fontWeight: '600'
+                    fontWeight: '600',
+                    fontSize: '0.85rem',
+                    whiteSpace: 'nowrap'
                   }}
-                  title="Click to sort A-Z / Z-A"
+                  title="Click to sort"
                 >
-                  {col}
+                  {col.replace(/_/g, ' ')}
                   <span style={{ fontSize: '0.8rem', color: sortConfig.key === col ? 'var(--primary-color)' : 'var(--text-muted)' }}>
                     {getSortIcon(col)}
                   </span>
                 </th>
               ))}
               {onDeleteRow && (
-                <th style={{ padding: '0.6rem 0.8rem', width: '70px', textAlign: 'center' }}>Action</th>
+                <th style={{ padding: '0.6rem 0.8rem', width: '60px', textAlign: 'center' }}>Del</th>
               )}
             </tr>
           </thead>
@@ -161,11 +322,27 @@ const DataTable = ({ data, onDeleteRow }) => {
               paginatedData.map((row, idx) => {
                 const rowNumber = rowsPerPage === 'All' ? idx + 1 : (activePage - 1) * rowsPerPage + idx + 1;
                 return (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: '0.5rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{rowNumber}</td>
-                    {columns.map(col => (
-                      <td key={col} style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>
-                        {row[col] !== undefined && row[col] !== null ? String(row[col]) : ''}
+                  <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.1s ease' }}>
+                    <td style={{ padding: '0.5rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center' }}>
+                      {rowNumber}
+                    </td>
+                    <td style={{ padding: '0.5rem 0.8rem', textAlign: 'center' }}>
+                      <button
+                        onClick={() => setSelectedDeed(row)}
+                        className="btn btn-outline"
+                        style={{
+                          padding: '0.2rem 0.5rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '4px',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        📄 View
+                      </button>
+                    </td>
+                    {visibleColumns.map(col => (
+                      <td key={col} style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                        {renderCellContent(col, row[col], row)}
                       </td>
                     ))}
                     {onDeleteRow && (
@@ -192,7 +369,7 @@ const DataTable = ({ data, onDeleteRow }) => {
               })
             ) : (
               <tr>
-                <td colSpan={columns.length + (onDeleteRow ? 2 : 1)} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <td colSpan={visibleColumns.length + (onDeleteRow ? 3 : 2)} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                   No matching records found.
                 </td>
               </tr>
@@ -257,6 +434,14 @@ const DataTable = ({ data, onDeleteRow }) => {
           </div>
         )}
       </div>
+
+      {/* Digital Index-II Deed Card Modal */}
+      {selectedDeed && (
+        <DeedDetailModal
+          deed={selectedDeed}
+          onClose={() => setSelectedDeed(null)}
+        />
+      )}
     </div>
   );
 };
