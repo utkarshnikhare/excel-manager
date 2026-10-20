@@ -8,6 +8,7 @@ import DataTable from './components/DataTable';
 
 function App() {
   const [masterData, setMasterData] = useState(null);
+  const [fileMeta, setFileMeta] = useState(null); // { workbook, sheetNames, activeSheet, fileName }
   const [stagedData, setStagedData] = useState([]);
   const [isDone, setIsDone] = useState(false); 
   const [theme, setTheme] = useState('light'); 
@@ -18,8 +19,37 @@ function App() {
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
-  const handleDataParsed = (data) => {
-    setMasterData(data);
+  const handleDataParsed = (parsedInfo) => {
+    if (parsedInfo && parsedInfo.data) {
+      setMasterData(parsedInfo.data);
+      setFileMeta({
+        workbook: parsedInfo.workbook,
+        sheetNames: parsedInfo.sheetNames || [],
+        activeSheet: parsedInfo.activeSheet || '',
+        fileName: parsedInfo.fileName || 'Spreadsheet.xlsx'
+      });
+    } else {
+      setMasterData(parsedInfo);
+      setFileMeta(null);
+    }
+    setStagedData([]);
+    setIsDone(false);
+  };
+
+  const handleSheetChange = (newSheetName) => {
+    if (!fileMeta || !fileMeta.workbook) return;
+    
+    if (stagedData.length > 0) {
+      const confirmSwitch = window.confirm("Switching sheets will reset your current search workspace. Continue?");
+      if (!confirmSwitch) return;
+    }
+
+    const worksheet = fileMeta.workbook.Sheets[newSheetName];
+    if (!worksheet) return;
+
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+    setMasterData(jsonData);
+    setFileMeta(prev => ({ ...prev, activeSheet: newSheetName }));
     setStagedData([]);
     setIsDone(false);
   };
@@ -53,7 +83,7 @@ function App() {
   };
 
   const handleClearStaged = () => {
-    if (window.confirm("Are you sure you want to clear all records from the temporary file?")) {
+    if (window.confirm("Are you sure you want to clear all records from the temporary workspace?")) {
       setStagedData([]);
     }
   };
@@ -92,12 +122,46 @@ function App() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             
-            <div className="top-status-bar">
-              <div>
-                <span style={{ color: 'var(--text-muted)' }}>Master File Loaded: </span>
-                <strong style={{ color: 'var(--text-main)' }}>{masterData.length} records</strong>
+            {/* Status bar with file info and Sheet Selector */}
+            <div className="top-status-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>File: </span>
+                  <strong style={{ color: 'var(--text-main)' }}>{fileMeta?.fileName || 'Spreadsheet'}</strong>
+                </div>
+
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Records: </span>
+                  <strong style={{ color: 'var(--text-main)' }}>{masterData.length} rows</strong>
+                </div>
+
+                {fileMeta && fileMeta.sheetNames.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Sheet:</span>
+                    <select
+                      value={fileMeta.activeSheet}
+                      onChange={(e) => handleSheetChange(e.target.value)}
+                      style={{
+                        padding: '0.3rem 0.6rem',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-card)',
+                        color: 'var(--text-main)',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {fileMeta.sheetNames.map((sheet, idx) => (
+                        <option key={idx} value={sheet}>{sheet}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <button className="btn btn-outline" onClick={() => setMasterData(null)}>📁 Change File</button>
+
+              <button className="btn btn-outline" onClick={() => { setMasterData(null); setFileMeta(null); }}>
+                📁 Change File
+              </button>
             </div>
 
             {!isDone ? (

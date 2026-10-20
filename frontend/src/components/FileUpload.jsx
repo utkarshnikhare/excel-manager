@@ -10,12 +10,11 @@ const FileUpload = ({ onDataParsed }) => {
   const processFile = (file) => {
     setError('');
     
-    // Check if it's a valid Excel format
-    const validExtensions = ['xlsx', 'xls'];
+    const validExtensions = ['xlsx', 'xls', 'csv'];
     const fileExtension = file.name.split('.').pop().toLowerCase();
 
     if (!validExtensions.includes(fileExtension)) {
-      setError('Invalid file type. Please upload a .xlsx or .xls file.');
+      setError('Invalid file type. Please upload a .xlsx, .xls, or .csv file.');
       return;
     }
 
@@ -25,26 +24,35 @@ const FileUpload = ({ onDataParsed }) => {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
-        
-        // This single line reads BOTH .xls and .xlsx perfectly into memory
         const workbook = XLSX.read(data, { type: 'array' });
         
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert the sheet into a JSON array for our app to use
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-        
-        if (jsonData.length === 0) {
-          setError('The uploaded Excel file appears to be empty.');
+        const sheetNames = workbook.SheetNames || [];
+        if (sheetNames.length === 0) {
+          setError('The uploaded Excel file contains no worksheets.');
           setIsLoading(false);
           return;
         }
 
-        onDataParsed(jsonData);
+        const firstSheetName = sheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        
+        if (jsonData.length === 0) {
+          setError(`Worksheet "${firstSheetName}" appears to be empty.`);
+          setIsLoading(false);
+          return;
+        }
+
+        onDataParsed({
+          data: jsonData,
+          workbook,
+          sheetNames,
+          activeSheet: firstSheetName,
+          fileName: file.name
+        });
       } catch (err) {
         console.error("Excel parsing error:", err);
-        setError('Failed to read the file. It might be corrupted.');
+        setError('Failed to read the file. It might be corrupted or password-protected.');
         setIsLoading(false);
       }
     };
@@ -54,6 +62,36 @@ const FileUpload = ({ onDataParsed }) => {
     };
     
     reader.readAsArrayBuffer(file);
+  };
+
+  // Demo sample data for instant testing
+  const loadSampleData = () => {
+    const demoRecords = [
+      { "ID": "EMP-101", "Name": "Rahul Sharma", "Hindi Name": "राहुल शर्मा", "City": "Mumbai", "Department": "Engineering", "Phone": "9820011223", "Status": "Active" },
+      { "ID": "EMP-102", "Name": "Pooja Patil", "Hindi Name": "पूजा पाटिल", "City": "Pune", "Department": "Finance", "Phone": "9820044556", "Status": "Active" },
+      { "ID": "EMP-103", "Name": "Amit Verma", "Hindi Name": "अमित वर्मा", "City": "Delhi", "Department": "Sales", "Phone": "9811122334", "Status": "Pending" },
+      { "ID": "EMP-104", "Name": "Sneha Kulkarni", "Hindi Name": "स्नेहा कुलकर्णी", "City": "Pune", "Department": "Engineering", "Phone": "9820077889", "Status": "Active" },
+      { "ID": "EMP-105", "Name": "Vishal Thombre", "Hindi Name": "विशाल ठोंबरे", "City": "Nashik", "Department": "Marketing", "Phone": "9890011223", "Status": "Active" },
+      { "ID": "EMP-106", "Name": "Utkarsh Nikhare", "Hindi Name": "उत्कर्ष निखारे", "City": "Nagpur", "Department": "Operations", "Phone": "9823344556", "Status": "Active" },
+      { "ID": "EMP-107", "Name": "Priya Deshmukh", "Hindi Name": "प्रिया देशमुख", "City": "Mumbai", "Department": "Human Resources", "Phone": "9821199887", "Status": "Inactive" },
+      { "ID": "EMP-108", "Name": "Suresh Gupta", "Hindi Name": "सुरेश गुप्ता", "City": "Delhi", "Department": "Engineering", "Phone": "9810055443", "Status": "Active" },
+      { "ID": "EMP-109", "Name": "Ananya Joshi", "Hindi Name": "अनन्या जोशी", "City": "Pune", "Department": "Engineering", "Phone": "9822233445", "Status": "Active" },
+      { "ID": "EMP-110", "Name": "Rohan Mehta", "Hindi Name": "रोहन मेहता", "City": "Ahmedabad", "Department": "Sales", "Phone": "9879911223", "Status": "Pending" },
+      { "ID": "EMP-111", "Name": "Deepak Shinde", "Hindi Name": "दीपक शिंदे", "City": "Mumbai", "Department": "Support", "Phone": "9820066778", "Status": "Active" },
+      { "ID": "EMP-112", "Name": "Kavita Rao", "Hindi Name": "कविता राव", "City": "Bengaluru", "Department": "Engineering", "Phone": "9845012345", "Status": "Active" }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(demoRecords);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Employees");
+
+    onDataParsed({
+      data: demoRecords,
+      workbook: wb,
+      sheetNames: ["Employees"],
+      activeSheet: "Employees",
+      fileName: "sample_employees.xlsx"
+    });
   };
 
   const handleDragOver = (e) => {
@@ -84,10 +122,10 @@ const FileUpload = ({ onDataParsed }) => {
   return (
     <div style={{ textAlign: 'center' }}>
       <h2 className="card-title" style={{ textAlign: 'left', borderBottom: 'none' }}>
-        📂 Load Master Data
+        📂 Load Spreadsheet Data
       </h2>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', textAlign: 'left' }}>
-        Upload your master spreadsheet to begin searching. We automatically convert legacy .xls files to modern formats in memory.
+        Upload your spreadsheet to begin searching. Supports .xlsx, .xls, and .csv with multi-sheet tab switching.
       </p>
 
       <div 
@@ -102,7 +140,7 @@ const FileUpload = ({ onDataParsed }) => {
         </div>
         
         {isLoading ? (
-          <h3 style={{ color: 'var(--text-main)', fontSize: '1.1rem' }}>Parsing File...</h3>
+          <h3 style={{ color: 'var(--text-main)', fontSize: '1.1rem' }}>Parsing Spreadsheet...</h3>
         ) : (
           <>
             <h3 style={{ color: 'var(--text-main)', fontSize: '1.1rem', marginBottom: '0.5rem' }}>
@@ -111,20 +149,34 @@ const FileUpload = ({ onDataParsed }) => {
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
               or click to browse from your computer
             </p>
-            {/* Explicitly accepting both extensions here */}
             <input 
               id="file-upload-input"
               type="file" 
-              accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+              accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
               style={{ display: 'none' }} 
               onChange={handleFileInput}
             />
-            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '8px', justifyContent: 'center' }}>
               <span style={{ fontSize: '0.75rem', padding: '4px 8px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-muted)', fontWeight: '600' }}>.XLSX</span>
               <span style={{ fontSize: '0.75rem', padding: '4px 8px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-muted)', fontWeight: '600' }}>.XLS</span>
+              <span style={{ fontSize: '0.75rem', padding: '4px 8px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-muted)', fontWeight: '600' }}>.CSV</span>
             </div>
           </>
         )}
+      </div>
+
+      {/* Instant Demo Sample Data Option */}
+      <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+          Don't have an Excel file right now?
+        </p>
+        <button 
+          className="btn btn-outline" 
+          onClick={loadSampleData}
+          style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+        >
+          ✨ Load Demo Sample Data (Instant Test)
+        </button>
       </div>
 
       {error && (
