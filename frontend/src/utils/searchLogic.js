@@ -178,12 +178,29 @@ const checkSingleCell = (cellValue, prep) => {
   return false;
 };
 
-// Pre-warm the search cache for all rows
+// Pre-warm search cache for all rows in non-blocking batches (scales to 50,000+ rows)
 export const warmSearchIndex = (dataset) => {
-  if (!Array.isArray(dataset)) return;
-  for (let i = 0; i < dataset.length; i++) {
-    getRowSearchBlob(dataset[i]);
+  if (!Array.isArray(dataset) || dataset.length === 0) return;
+  const total = dataset.length;
+  let idx = 0;
+  const batchSize = 5000;
+
+  function processBatch() {
+    const end = Math.min(idx + batchSize, total);
+    while (idx < end) {
+      getRowSearchBlob(dataset[idx]);
+      idx++;
+    }
+    if (idx < total) {
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(processBatch);
+      } else {
+        setTimeout(processBatch, 0);
+      }
+    }
   }
+
+  processBatch();
 };
 
 export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') => {
