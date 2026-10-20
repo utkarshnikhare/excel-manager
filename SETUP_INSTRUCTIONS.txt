@@ -1,0 +1,45 @@
+================================================================
+🚀 EXCEL & PROPERTY MANAGER - COMPLETE SETUP GUIDE
+================================================================
+
+PREREQUISITE:
+- Ensure Node.js (v18 or higher) is installed on your computer.
+  If not installed, download free from: https://nodejs.org
+
+----------------------------------------------------------------
+OPTION A: 1-CLICK INSTANT LAUNCH (WINDOWS)
+----------------------------------------------------------------
+1. Just double-click on "START_APPLICATION.bat" in this folder.
+2. It will automatically install packages and open http://localhost:5173
+   in your default web browser!
+
+----------------------------------------------------------------
+OPTION B: MANUAL TERMINAL SETUP (MAC / LINUX / WINDOWS)
+----------------------------------------------------------------
+1. Open your Terminal / Command Prompt in this project folder.
+2. Navigate into the frontend folder:
+      cd frontend
+3. Install required dependencies:
+      npm install
+4. Start the application server:
+      npm run dev
+5. Open your browser and go to:
+      http://localhost:5173
+
+----------------------------------------------------------------
+HOW TO PUSH THIS AS YOUR OWN FRESH GITHUB REPOSITORY:
+----------------------------------------------------------------
+If you want to host this on your own GitHub account:
+1. Open terminal in this root folder.
+2. Run:
+      git init
+      git add .
+      git commit -m "Initial commit - Excel & Property Manager"
+3. Create a new empty repository on your GitHub account.
+4. Run:
+      git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+      git branch -M main
+      git push -u origin main
+
+Your project is completely standalone with zero dependencies on any external repo!
+================================================================
