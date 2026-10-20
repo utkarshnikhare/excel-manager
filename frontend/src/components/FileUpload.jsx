@@ -6,10 +6,17 @@ const FileUpload = ({ onDataParsed }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Core logic to read both .xls and .xlsx
+  // Core logic to read .xlsx, .xls, .csv, and HTML-tables-as-xls
   const processFile = (file) => {
     setError('');
-    
+
+    if (!file) return;
+
+    if (file.size === 0) {
+      setError('The selected file is empty (0 bytes).');
+      return;
+    }
+
     const validExtensions = ['xlsx', 'xls', 'csv'];
     const fileExtension = file.name.split('.').pop().toLowerCase();
 
@@ -23,12 +30,26 @@ const FileUpload = ({ onDataParsed }) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
+        let workbook;
+
+        // Strategy 1: Try reading as binary array buffer
+        try {
+          const data = new Uint8Array(e.target.result);
+          workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        } catch (binaryErr) {
+          // Strategy 2: Fallback for CSV or HTML-table exports saved as .xls
+          try {
+            const textDecoder = new TextDecoder('utf-8');
+            const text = textDecoder.decode(e.target.result);
+            workbook = XLSX.read(text, { type: 'string', cellDates: true });
+          } catch (textErr) {
+            throw new Error(binaryErr.message || "Unrecognized spreadsheet format");
+          }
+        }
+
         const sheetNames = workbook.SheetNames || [];
         if (sheetNames.length === 0) {
-          setError('The uploaded Excel file contains no worksheets.');
+          setError('The uploaded Excel file contains no readable worksheets.');
           setIsLoading(false);
           return;
         }
@@ -36,12 +57,15 @@ const FileUpload = ({ onDataParsed }) => {
         const firstSheetName = sheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-        
+
         if (jsonData.length === 0) {
           setError(`Worksheet "${firstSheetName}" appears to be empty.`);
           setIsLoading(false);
           return;
         }
+
+        setError('');
+        setIsLoading(false);
 
         onDataParsed({
           data: jsonData,
@@ -52,20 +76,26 @@ const FileUpload = ({ onDataParsed }) => {
         });
       } catch (err) {
         console.error("Excel parsing error:", err);
-        setError('Failed to read the file. It might be corrupted or password-protected.');
         setIsLoading(false);
+        setError(
+          `Could not read this file. If it is currently open in Microsoft Excel, please close it and try again, or make sure it is not password-protected.`
+        );
       }
     };
+
     reader.onerror = () => {
       setError('A browser error occurred while reading the file.');
       setIsLoading(false);
     };
-    
+
     reader.readAsArrayBuffer(file);
   };
 
   // Demo sample data for instant testing
   const loadSampleData = () => {
+    setError('');
+    setIsLoading(true);
+
     const demoRecords = [
       { "ID": "EMP-101", "Name": "Rahul Sharma", "Hindi Name": "राहुल शर्मा", "City": "Mumbai", "Department": "Engineering", "Phone": "9820011223", "Status": "Active" },
       { "ID": "EMP-102", "Name": "Pooja Patil", "Hindi Name": "पूजा पाटिल", "City": "Pune", "Department": "Finance", "Phone": "9820044556", "Status": "Active" },
@@ -84,6 +114,8 @@ const FileUpload = ({ onDataParsed }) => {
     const ws = XLSX.utils.json_to_sheet(demoRecords);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Employees");
+
+    setIsLoading(false);
 
     onDataParsed({
       data: demoRecords,
@@ -125,7 +157,7 @@ const FileUpload = ({ onDataParsed }) => {
         📂 Load Spreadsheet Data
       </h2>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', textAlign: 'left' }}>
-        Upload your spreadsheet to begin searching. Supports .xlsx, .xls, and .csv with multi-sheet tab switching.
+        Upload your spreadsheet to begin searching. Supports standard .xlsx, .xls, and .csv files.
       </p>
 
       <div 
@@ -180,8 +212,17 @@ const FileUpload = ({ onDataParsed }) => {
       </div>
 
       {error && (
-        <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: '8px', color: '#ef4444' }}>
-          <strong>Error: </strong> {error}
+        <div style={{
+          marginTop: '1.5rem',
+          padding: '1rem',
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid #ef4444',
+          borderRadius: '8px',
+          color: '#ef4444',
+          textAlign: 'left',
+          fontSize: '0.9rem'
+        }}>
+          <strong>⚠️ {error}</strong>
         </div>
       )}
     </div>
