@@ -501,7 +501,9 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
           }}>
             <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span>🎯 Results:</span>
-              <strong style={{ color: '#3b82f6' }}>{pendingResults.length} Matching Deeds Found</strong>
+              <strong style={{ color: pendingResults.length > 0 ? '#3b82f6' : '#f59e0b' }}>
+                {pendingResults.length} Matching Deeds Found
+              </strong>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>
                 (filtered from {masterData?.length || 0} total)
               </span>

@@ -6,6 +6,7 @@ import FileUpload from './components/FileUpload';
 import SearchPanel from './components/SearchPanel';
 import DataTable from './components/DataTable';
 import KPIDashboard from './components/KPIDashboard';
+import ErrorBoundary from './components/ErrorBoundary';
 import { hashRecord } from './utils/searchLogic';
 import { enrichRow } from './utils/propertyParser';
 
@@ -154,6 +155,7 @@ function App() {
       <Header theme={theme} toggleTheme={toggleTheme} />
 
       <main className="main-content">
+        <ErrorBoundary>
         {!masterData ? (
           <div className="card" style={{ maxWidth: '850px', margin: '3rem auto' }}>
             <FileUpload onDataParsed={handleDataParsed} />
@@ -327,6 +329,7 @@ function App() {
             )}
           </div>
         )}
+        </ErrorBoundary>
       </main>
     </div>
   );

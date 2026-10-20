@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import DeedDetailModal from './DeedDetailModal';
 import { formatINR } from '../utils/propertyParser';
 
@@ -13,21 +13,31 @@ const DataTable = ({ data, onDeleteRow }) => {
   ]));
   const [showColPicker, setShowColPicker] = useState(false);
 
-  if (!data || data.length === 0) {
-    return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1.5rem' }}>No records to display.</p>;
-  }
+  // Safe data array ensuring zero hook skips or crashes
+  const safeData = useMemo(() => Array.isArray(data) ? data : [], [data]);
 
-  const allColumns = Object.keys(data[0] || {});
-  const visibleColumns = allColumns.filter(c => !hiddenCols.has(c));
+  // Extract all columns
+  const allColumns = useMemo(() => {
+    return safeData.length > 0 ? Object.keys(safeData[0]) : [];
+  }, [safeData]);
+
+  const visibleColumns = useMemo(() => {
+    return allColumns.filter(c => !hiddenCols.has(c));
+  }, [allColumns, hiddenCols]);
+
+  // Reset page when data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data]);
 
   // 1. Quick in-table filter
   const filteredData = useMemo(() => {
-    if (!quickFilter.trim()) return data;
+    if (!quickFilter.trim()) return safeData;
     const q = quickFilter.toLowerCase();
-    return data.filter(row =>
+    return safeData.filter(row =>
       allColumns.some(col => String(row[col] ?? '').toLowerCase().includes(q))
     );
-  }, [data, allColumns, quickFilter]);
+  }, [safeData, allColumns, quickFilter]);
 
   // 2. Multi-type Column Sorting (Numbers vs Text)
   const sortedData = useMemo(() => {
@@ -178,6 +188,28 @@ const DataTable = ({ data, onDeleteRow }) => {
 
     return String(val);
   };
+
+  // If no records at all
+  if (safeData.length === 0) {
+    return (
+      <div style={{
+        padding: '2.5rem 1.5rem',
+        textAlign: 'center',
+        background: 'var(--bg-main)',
+        borderRadius: '12px',
+        border: '1px dashed var(--border-color)',
+        marginTop: '0.5rem'
+      }}>
+        <div style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>🔍</div>
+        <strong style={{ fontSize: '1.05rem', color: 'var(--text-main)', display: 'block', marginBottom: '0.35rem' }}>
+          No records match your active filters
+        </strong>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '500px', margin: '0 auto' }}>
+          Try clearing the year or society filter, or searching for a different keyword.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="datatable-container" style={{ marginTop: '0.5rem' }}>
