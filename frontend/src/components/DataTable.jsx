@@ -335,7 +335,7 @@ const DataTable = ({ data, onDeleteRow }) => {
           </div>
         </div>
 
-        <div>
+        <div style={{ flex: '1 1 auto', maxWidth: '300px' }}>
           <input
             type="text"
             placeholder="🔍 In-table filter (e.g. Esfera, 16060, Flat 504)..."
@@ -351,7 +351,7 @@ const DataTable = ({ data, onDeleteRow }) => {
               background: 'var(--bg-card)',
               color: 'var(--text-main)',
               fontSize: '0.85rem',
-              minWidth: '260px'
+              width: '100%'
             }}
           />
         </div>
@@ -360,7 +360,7 @@ const DataTable = ({ data, onDeleteRow }) => {
       {displayMode === 'cards' ? (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: '1rem',
           maxHeight: '560px',
           overflowY: 'auto',
