@@ -5,6 +5,7 @@ import Header from './components/Header';
 import FileUpload from './components/FileUpload';
 import SearchPanel from './components/SearchPanel';
 import DataTable from './components/DataTable';
+import { hashRecord } from './utils/searchLogic';
 
 function App() {
   const [masterData, setMasterData] = useState(null);
@@ -54,32 +55,44 @@ function App() {
     setIsDone(false);
   };
 
-  // Handles the 3 different set operations
+  // Robust set operations with deterministic key-sorted hashing
   const handleProcessResults = (action, newResults) => {
     if (action === 'INITIAL_ADD' || action === 'OVERWRITE') {
-      const uniqueSet = new Set(newResults.map(row => JSON.stringify(row)));
-      setStagedData(Array.from(uniqueSet).map(str => JSON.parse(str)));
+      const map = new Map();
+      newResults.forEach(row => {
+        const h = hashRecord(row);
+        if (!map.has(h)) map.set(h, row);
+      });
+      setStagedData(Array.from(map.values()));
       
     } else if (action === 'APPEND') {
       setStagedData(prevData => {
-        const combined = [...prevData, ...newResults];
-        const uniqueSet = new Set(combined.map(row => JSON.stringify(row)));
-        return Array.from(uniqueSet).map(str => JSON.parse(str));
+        const map = new Map();
+        prevData.forEach(row => map.set(hashRecord(row), row));
+        newResults.forEach(row => {
+          const h = hashRecord(row);
+          if (!map.has(h)) map.set(h, row);
+        });
+        return Array.from(map.values());
       });
       
     } else if (action === 'RETAIN') {
       setStagedData(prevData => {
-        const prevSet = new Set(prevData.map(row => JSON.stringify(row)));
-        const common = newResults.filter(row => prevSet.has(JSON.stringify(row)));
-        const uniqueSet = new Set(common.map(row => JSON.stringify(row)));
-        return Array.from(uniqueSet).map(str => JSON.parse(str));
+        const prevSet = new Set(prevData.map(hashRecord));
+        const common = newResults.filter(row => prevSet.has(hashRecord(row)));
+        const map = new Map();
+        common.forEach(row => {
+          const h = hashRecord(row);
+          if (!map.has(h)) map.set(h, row);
+        });
+        return Array.from(map.values());
       });
     }
   };
 
   const handleDeleteRow = (rowToDelete) => {
-    const targetStr = JSON.stringify(rowToDelete);
-    setStagedData(prev => prev.filter(r => JSON.stringify(r) !== targetStr));
+    const targetHash = hashRecord(rowToDelete);
+    setStagedData(prev => prev.filter(r => hashRecord(r) !== targetHash));
   };
 
   const handleClearStaged = () => {
@@ -88,12 +101,18 @@ function App() {
     }
   };
 
+  const getExportFilename = (extension) => {
+    const baseName = (fileMeta?.fileName || 'Spreadsheet').replace(/\.[^/.]+$/, "");
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return `Export_${baseName}_${dateStr}.${extension}`;
+  };
+
   const handleExportExcel = () => {
     if (stagedData.length === 0) return;
     const worksheet = XLSX.utils.json_to_sheet(stagedData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Compiled Data");
-    XLSX.writeFile(workbook, "Filtered_Records.xlsx");
+    XLSX.utils.book_append_sheet(workbook, worksheet, fileMeta?.activeSheet || "Filtered Data");
+    XLSX.writeFile(workbook, getExportFilename('xlsx'));
   };
 
   const handleExportCSV = () => {
@@ -104,7 +123,7 @@ function App() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "Filtered_Records.csv");
+    link.setAttribute("download", getExportFilename('csv'));
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

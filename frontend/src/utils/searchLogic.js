@@ -1,26 +1,41 @@
 const devanagariMap = {
   'अ': 'a', 'आ': 'a', 'इ': 'i', 'ई': 'i', 'उ': 'u', 'ऊ': 'u', 'ए': 'e', 'ऐ': 'e', 'ओ': 'o', 'औ': 'o',
+  'ऋ': 'r', 'ॠ': 'r', 'ऍ': 'a', 'ऑ': 'o',
   'क': 'k', 'ख': 'k', 'ग': 'g', 'घ': 'g', 'ङ': 'n',
   'च': 'ch', 'छ': 'ch', 'ज': 'j', 'झ': 'j', 'ञ': 'n',
   'ट': 't', 'ठ': 't', 'ड': 'd', 'ढ': 'd', 'ण': 'n',
   'त': 't', 'थ': 't', 'द': 'd', 'ध': 'd', 'न': 'n',
-  'प': 'p', 'फ': 'p', 'ब': 'b', 'भ': 'b', 'म': 'm',
+  'प': 'p', 'फ': 'f', 'ब': 'b', 'भ': 'b', 'म': 'm',
   'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 's', 'ष': 's', 'स': 's', 'ह': 'h',
   'ळ': 'l', 'क्ष': 'x', 'ज्ञ': 'gy',
-  'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u', 'ृ': 'r', 'े': 'e', 'ै': 'e', 'ो': 'o', 'ौ': 'o', 'ं': 'n', 'ः': 'h', '्': ''
+  // Matras & modifiers
+  'ा': 'a', 'ि': 'i', 'ी': 'i', 'ु': 'u', 'ू': 'u', 'ृ': 'r', 'े': 'e', 'ै': 'e', 'ो': 'o', 'ौ': 'o',
+  'ॅ': 'a', 'ॉ': 'o', 'ं': 'n', 'ँ': 'n', 'ः': 'h', '्': '',
+  // Nukta consonants
+  'क़': 'k', 'ख़': 'kh', 'ग़': 'gh', 'ज़': 'z', 'ड़': 'd', 'ढ़': 'dh', 'फ़': 'f'
 };
 
 export const transliterate = (text) => {
   let result = "";
-  for (let char of String(text).toLowerCase()) {
+  // Strip virama (halant \u094D) and zero-width characters (\u200C, \u200D)
+  const str = String(text || '').replace(/[\u094D\u200C\u200D]/g, '').toLowerCase();
+  for (let char of str) {
     result += devanagariMap[char] || char;
   }
   return result;
 };
 
+// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f)
 export const getSkeleton = (text) => {
-  let skel = text.replace(/[aeiouy\W0-9_]/g, '');
-  return skel.replace(/(.)\1+/g, '$1'); 
+  let normalized = text
+    .toLowerCase()
+    .replace(/ph/g, 'f')
+    .replace(/w/g, 'v')
+    .replace(/sh/g, 's')
+    .replace(/[aeiouy\W0-9_]/g, '');
+
+  // Compress consecutive identical letters (e.g. kk -> k, mm -> m)
+  return normalized.replace(/(.)\1+/g, '$1'); 
 };
 
 export const levenshtein = (a, b) => {
@@ -46,6 +61,17 @@ export const levenshtein = (a, b) => {
   return matrix[b.length][a.length];
 };
 
+// Deterministic row hash for accurate deduplication regardless of key order
+export const hashRecord = (row) => {
+  if (!row || typeof row !== 'object') return '';
+  const sortedKeys = Object.keys(row).sort();
+  const normalizedObj = {};
+  for (let k of sortedKeys) {
+    normalizedObj[k] = row[k];
+  }
+  return JSON.stringify(normalizedObj);
+};
+
 export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') => {
   const activeCriteria = criteriaList.filter(c => c.column && c.query.trim() !== "");
   
@@ -57,21 +83,22 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
       const rawQuery = String(criteria.query).trim().toLowerCase();
       const rawCell = cellValue.trim().toLowerCase();
 
-      // Tier 0: Direct Raw Match (Critical for Phone numbers, IDs, Numbers, Exact matches)
+      // Tier 0: Direct Raw Match (Instant for Phone numbers, IDs, Numbers, Exact text)
       if (rawCell.includes(rawQuery)) return true;
 
       const queryTrans = transliterate(criteria.query);
-      const querySkel = getSkeleton(queryTrans);
       const cellTrans = transliterate(cellValue);
-      const cellSkel = getSkeleton(cellTrans);
-      
+
       // Tier 1: Fast Transliterated Substring Match
       if (cellTrans.includes(queryTrans)) return true;
 
-      // Tier 2: Fast Phonetic Substring Match (Handles words without spaces)
+      const querySkel = getSkeleton(queryTrans);
+      const cellSkel = getSkeleton(cellTrans);
+
+      // Tier 2: Fast Phonetic Skeleton Match
       if (querySkel.length > 1 && cellSkel.includes(querySkel)) return true;
 
-      // Tier 3: Smart Phrase Matcher (Multi-word names & typo tolerance)
+      // Tier 3: Multi-Word Phrase Matcher
       const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
       const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
 
@@ -83,21 +110,18 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
           let wordMatched = false;
 
           for (let cWord of cellWords) {
-            // Direct word match
             if (cWord.includes(qWord)) { 
               wordMatched = true; 
               break; 
             }
 
             const cWordSkel = getSkeleton(cWord);
-            
-            // Substring skeleton match (for words >= 2 consonants)
             if (qWordSkel.length > 1 && cWordSkel.includes(qWordSkel)) { 
               wordMatched = true; 
               break; 
             }
 
-            // Typo match (requires at least 3 consonants to avoid noisy false positives)
+            // Typo match (requires >= 3 consonants to avoid noisy false positives)
             if (qWordSkel.length >= 3 && cWordSkel.length >= 3) {
               const maxTypos = Math.max(1, Math.floor(qWordSkel.length / 3));
               if (levenshtein(qWordSkel, cWordSkel) <= maxTypos) {

@@ -2,21 +2,76 @@ import React from 'react';
 
 const Header = ({ theme, toggleTheme }) => {
   return (
-    <header className="app-header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="8" y1="13" x2="16" y2="13"></line>
-          <line x1="8" y1="17" x2="16" y2="17"></line>
-          <polyline points="10 9 9 9 8 9"></polyline>
-        </svg>
-        <h1>DataFlow Excel Manager</h1>
+    <header className="app-header" style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '0.85rem 1.5rem',
+      backgroundColor: 'var(--bg-card)',
+      borderBottom: '1px solid var(--border-color)',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '36px',
+          height: '36px',
+          borderRadius: '8px',
+          background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontWeight: 'bold',
+          fontSize: '1.1rem'
+        }}>
+          📊
+        </div>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h1 style={{ fontSize: '1.25rem', margin: 0, fontWeight: '700', color: 'var(--text-main)' }}>
+              Smart Excel Search & Manager
+            </h1>
+            <span style={{
+              fontSize: '0.7rem',
+              padding: '2px 6px',
+              borderRadius: '10px',
+              background: 'rgba(59, 130, 246, 0.1)',
+              color: '#3b82f6',
+              fontWeight: '600'
+            }}>
+              v2.0
+            </span>
+            <span style={{
+              fontSize: '0.7rem',
+              padding: '2px 6px',
+              borderRadius: '10px',
+              background: 'rgba(22, 101, 52, 0.1)',
+              color: '#166534',
+              fontWeight: '600'
+            }}>
+              🔒 100% In-Browser Private
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            Multilingual Phonetic Search • Dynamic Merging • Excel & CSV Export
+          </p>
+        </div>
       </div>
       
-      <button className="btn btn-theme" onClick={toggleTheme}>
-        {theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode'}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <a 
+          href="https://github.com/utkarshnikhare/excel-manager" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="btn btn-outline"
+          style={{ textDecoration: 'none', fontSize: '0.85rem', padding: '0.4rem 0.75rem' }}
+        >
+          GitHub ↗
+        </a>
+        <button className="btn btn-theme" onClick={toggleTheme} style={{ fontSize: '0.85rem' }}>
+          {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        </button>
+      </div>
     </header>
   );
 };
