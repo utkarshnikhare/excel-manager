@@ -25,10 +25,11 @@ export const transliterate = (text) => {
   return result;
 };
 
-// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f)
+// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f, dny=jny=gy=jn)
 export const getSkeleton = (text) => {
   let normalized = text
     .toLowerCase()
+    .replace(/dny|jny|gy/g, 'jn')
     .replace(/ph/g, 'f')
     .replace(/w/g, 'v')
     .replace(/sh/g, 's')
@@ -79,70 +80,78 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND') 
 
   return masterData.filter(row => {
     const checkCriteria = (criteria) => {
-      const cellValue = String(row[criteria.column] ?? "");
-      const rawQuery = String(criteria.query).trim().toLowerCase();
-      const rawCell = cellValue.trim().toLowerCase();
+      const checkSingleCell = (cellValue) => {
+        const rawQuery = String(criteria.query).trim().toLowerCase();
+        const rawCell = String(cellValue ?? '').trim().toLowerCase();
 
-      // Tier 0: Direct Raw Match (Instant for Phone numbers, IDs, Numbers, Exact text)
-      if (rawCell.includes(rawQuery)) return true;
+        // Tier 0: Direct Raw Match (Instant for Phone numbers, IDs, Numbers, Exact text)
+        if (rawCell.includes(rawQuery)) return true;
 
-      const queryTrans = transliterate(criteria.query);
-      const cellTrans = transliterate(cellValue);
+        const queryTrans = transliterate(criteria.query);
+        const cellTrans = transliterate(cellValue);
 
-      // Tier 1: Fast Transliterated Substring Match
-      if (cellTrans.includes(queryTrans)) return true;
+        // Tier 1: Fast Transliterated Substring Match
+        if (cellTrans.includes(queryTrans)) return true;
 
-      const querySkel = getSkeleton(queryTrans);
-      const cellSkel = getSkeleton(cellTrans);
+        const querySkel = getSkeleton(queryTrans);
+        const cellSkel = getSkeleton(cellTrans);
 
-      // Tier 2: Fast Phonetic Skeleton Match
-      if (querySkel.length > 1 && cellSkel.includes(querySkel)) return true;
+        // Tier 2: Fast Phonetic Skeleton Match
+        if (querySkel.length > 1 && cellSkel.includes(querySkel)) return true;
 
-      // Tier 3: Multi-Word Phrase Matcher
-      const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
-      const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
+        // Tier 3: Multi-Word Phrase Matcher
+        const queryWords = queryTrans.split(/\s+/).filter(w => w.length > 0);
+        const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
 
-      if (queryWords.length > 0) {
-        let matchedWordsCount = 0;
+        if (queryWords.length > 0) {
+          let matchedWordsCount = 0;
 
-        for (let qWord of queryWords) {
-          const qWordSkel = getSkeleton(qWord);
-          let wordMatched = false;
+          for (let qWord of queryWords) {
+            const qWordSkel = getSkeleton(qWord);
+            let wordMatched = false;
 
-          for (let cWord of cellWords) {
-            if (cWord.includes(qWord)) { 
-              wordMatched = true; 
-              break; 
-            }
-
-            const cWordSkel = getSkeleton(cWord);
-            if (qWordSkel.length > 1 && cWordSkel.includes(qWordSkel)) { 
-              wordMatched = true; 
-              break; 
-            }
-
-            // Typo match (requires >= 3 consonants to avoid noisy false positives)
-            if (qWordSkel.length >= 3 && cWordSkel.length >= 3) {
-              const maxTypos = Math.max(1, Math.floor(qWordSkel.length / 3));
-              if (levenshtein(qWordSkel, cWordSkel) <= maxTypos) {
-                wordMatched = true; 
+            for (let cWord of cellWords) {
+              if (cWord.includes(qWord)) {
+                wordMatched = true;
                 break;
               }
+
+              const cWordSkel = getSkeleton(cWord);
+              if (qWordSkel.length > 1 && cWordSkel.includes(qWordSkel)) {
+                wordMatched = true;
+                break;
+              }
+
+              if (qWord.length >= 4 && cWord.length >= 4) {
+                const dist = levenshtein(qWord, cWord);
+                if (dist <= 1) {
+                  wordMatched = true;
+                  break;
+                }
+              }
             }
+
+            if (wordMatched) matchedWordsCount++;
           }
-          if (wordMatched) matchedWordsCount++;
+
+          if (matchedWordsCount === queryWords.length) return true;
         }
 
-        const requiredMatches = Math.ceil(queryWords.length * 0.75);
-        if (matchedWordsCount >= requiredMatches) return true;
+        return false;
+      };
+
+      // Support Global Search across all fields in row
+      if (criteria.column === 'ALL' || criteria.column === '_ALL_') {
+        return Object.values(row).some(val => checkSingleCell(val));
       }
-      
-      return false; 
+
+      return checkSingleCell(row[criteria.column]);
     };
 
-    if (matchMode === 'OR') {
+    if (matchMode === 'AND') {
+      return activeCriteria.every(checkCriteria);
+    } else {
       return activeCriteria.some(checkCriteria);
     }
-    return activeCriteria.every(checkCriteria);
   });
 };

@@ -4,10 +4,10 @@ import DataTable from './DataTable';
 
 const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externalFilter }) => {
   const columns = masterData && masterData.length > 0 ? Object.keys(masterData[0]) : [];
-  const defaultCol = columns.length > 0 ? columns[0] : '';
+  const defaultCol = 'ALL';
 
   const [conditions, setConditions] = useState([
-    { column: defaultCol, query: '' }
+    { column: 'ALL', query: '' }
   ]);
   const [matchMode, setMatchMode] = useState('AND'); // 'AND' or 'OR'
   const [pendingResults, setPendingResults] = useState(null);
@@ -266,8 +266,9 @@ const SearchPanel = ({ masterData, stagedData, onProcessResults, onDone, externa
                 value={cond.column} 
                 onChange={(e) => handleConditionChange(index, 'column', e.target.value)}
               >
+                <option value="ALL">🌐 All Columns (Global Search)</option>
                 {columns.map((col, idx) => (
-                  <option key={idx} value={col}>{col}</option>
+                  <option key={idx} value={col}>{col.replace(/_/g, ' ')}</option>
                 ))}
               </select>
             </div>
