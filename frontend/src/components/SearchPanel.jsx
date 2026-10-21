@@ -59,12 +59,23 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
     if (!masterData) return [];
     const counts = {};
     masterData.forEach(r => {
-      if (r.docname) counts[r.docname] = (counts[r.docname] || 0) + 1;
+      const d = r.docname || r.DocName;
+      if (d) counts[d] = (counts[d] || 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [masterData]);
 
-  const years = ['2026', '2025', '2024', '2023', '2018'];
+  const years = useMemo(() => {
+    if (!masterData) return ['2026', '2025', '2024', '2023', '2018', '2015'];
+    const yearSet = new Set();
+    masterData.forEach(r => {
+      const dStr = String(r.registrationdate || r.RegistrationDate || '');
+      const match = dStr.match(/\b(19\d{2}|20\d{2})\b/);
+      if (match) yearSet.add(match[1]);
+    });
+    const arr = Array.from(yearSet).sort().reverse();
+    return arr.length > 0 ? arr : ['2026', '2025', '2024', '2023', '2018', '2015'];
+  }, [masterData]);
 
   // Sync external filter (e.g. from KPIDashboard society clicks)
   useEffect(() => {

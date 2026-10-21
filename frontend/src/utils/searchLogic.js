@@ -43,6 +43,9 @@ export const getSkeleton = (text) => {
   let normalized = String(text)
     .toLowerCase()
     .replace(/dny|jny|gy/g, 'jn')
+    .replace(/gn/g, 'n') // Silent English g before n (assignment, sign, design)
+    .replace(/kn/g, 'n') // Silent English k before n (know, knight)
+    .replace(/wr/g, 'r') // Silent English w before r (write, wrap)
     .replace(/ph/g, 'f')
     .replace(/w/g, 'v')
     .replace(/sh/g, 's')
@@ -57,6 +60,48 @@ export const getSkeleton = (text) => {
     .trim();
 
   return normalized.replace(/([a-z0-9])\1+/g, '$1'); 
+};
+
+// Comprehensive Bidirectional Legal Deed & Term Translation Dictionary (English ⇄ Marathi/Devanagari)
+export const deedSynonyms = {
+  'assignment': ['असाईनमेंट', 'असाइनमेंट', 'असाईंमेंट', 'असाईनमेंट डीड', 'assignment'],
+  'असाईनमेंट': ['assignment', 'असाईनमेंट', 'असाइनमेंट', 'असाईंमेंट', 'assignment deed'],
+  'असाइनमेंट': ['assignment', 'असाइनमेंट', 'असाईनमेंट'],
+  'agreement': ['अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट', 'करारनामा', 'करार', 'agreement'],
+  'करारनामा': ['agreement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट'],
+  'अँग्रीमेंट': ['agreement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
+  'अॅग्रीमेंट': ['agreement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
+  'sale': ['खरेदीखत', 'विक्रीखत', 'सेल', 'खरेदी', 'sale'],
+  'saledeed': ['खरेदीखत', 'विक्रीखत', 'सेल डीड', 'sale deed', 'saledeed'],
+  'खरेदीखत': ['sale deed', 'sale', 'खरेदीखत', 'विक्रीखत', 'सेल डीड'],
+  'leaveandlicense': ['लिव्ह अॅड लायसन्सेस', 'लिव्ह अँड लायसन्स', 'लिव्ह अॅन्ड लायसेंसेस', 'लायसन्स', 'leave and licenses', 'leave and license'],
+  'license': ['लिव्ह अॅड लायसन्सेस', 'लिव्ह अँड लायसन्स', 'लायसन्स', 'लायसन्सेस', 'license'],
+  'लिव्ह': ['leave and license', 'license', 'लिव्ह'],
+  'lease': ['लीज', 'भाडेपट्टा', 'पट्टा', 'lease'],
+  'लीज': ['lease', 'लीज', 'भाडेपट्टा'],
+  'mortgage': ['गहाणखत', 'तारण', 'मॉर्टगेज', 'mortgage'],
+  'गहाणखत': ['mortgage', 'गहाणखत', 'मॉर्टगेज'],
+  'gift': ['बक्षीसपत्र', 'दानपत्र', 'गिफ्ट', 'gift'],
+  'बक्षीसपत्र': ['gift', 'बक्षीसपत्र', 'दानपत्र', 'गिफ्ट डीड'],
+  'release': ['हक्कसोडपत्र', 'सोडपत्र', 'रिलीज', 'release'],
+  'हक्कसोडपत्र': ['release', 'हक्कसोडपत्र', 'सोडपत्र', 'रिलीज डीड'],
+  'partition': ['वाटपपत्र', 'पार्टिशन', 'partition'],
+  'वाटपपत्र': ['partition', 'वाटपपत्र', 'पार्टिशन'],
+  'powerofattorney': ['कुलमुखत्यारपत्र', 'पॉवर ऑफ ॲटर्नी', 'power of attorney', 'poa'],
+  'poa': ['कुलमुखत्यारपत्र', 'पॉवर ऑफ ॲटर्नी', 'poa'],
+  'कुलमुखत्यारपत्र': ['power of attorney', 'poa', 'कुलमुखत्यारपत्र'],
+  'development': ['विकास करार', 'डेव्हलपमेंट', 'विकसनकरारनामा', 'development'],
+  'विकसनकरारनामा': ['development', 'विकसनकरारनामा', 'विकास करार'],
+  'conveyance': ['हस्तांतरण', 'कन्वेयन्स', 'अभिहस्तांतरणपत्र', 'conveyance'],
+  'अभिहस्तांतरणपत्र': ['conveyance', 'अभिहस्तांतरणपत्र', 'हस्तांतरण'],
+  'reconveyance': ['रिकन्व्हेन्स', 'रिकन्व्हेयन्स', 'reconveyance'],
+  'रिकन्व्हेन्स': ['reconveyance', 'रिकन्व्हेन्स'],
+  'rectification': ['दुरुस्तीपत्र', 'रेक्टीफिकेशन', 'चुक दुरुस्ती', 'rectification'],
+  'चुकदुरुस्ती': ['rectification', 'दुरुस्तीपत्र', 'चुक दुरुस्ती पत्र'],
+  'cancellation': ['रद्दबातल', 'कॅन्सलेशन', 'cancellation'],
+  'कॅन्सलेशन': ['cancellation', 'रद्दबातल', 'कॅन्सलेशन डीड'],
+  'jointventure': ['जॉईट व्हेंचर', 'जॉईंट व्हेंचर', 'joint venture'],
+  'जॉईटव्हेंचर': ['joint venture', 'जॉईट व्हेंचर']
 };
 
 export const cleanParty = (str) => {
@@ -103,21 +148,21 @@ export const hashRecord = (row) => {
   return JSON.stringify(normalizedObj);
 };
 
-// Target text fields for global search to avoid scanning numeric garbage
-const searchableColumns = [
-  'sellerparty', 'purchaserparty', 'propertydescription', 'docno',
-  'society', 'flat_no', 'docname', 'sroname', 'areaname', 'registrationdate', 'source_file'
-];
-
 // Pre-indexed search representation on the row (cached lazily & non-enumerable)
+// Dynamically scans ALL columns of the row so NO field or data from ANY uploaded file is ever missed
 export const getRowSearchBlob = (row) => {
   if (row._searchBlob) return row._searchBlob;
   const rawParts = [];
-  for (let i = 0; i < searchableColumns.length; i++) {
-    const col = searchableColumns[i];
+  const keys = Object.keys(row);
+  for (let i = 0; i < keys.length; i++) {
+    const col = keys[i];
+    if (col.startsWith('_')) continue;
     const val = row[col];
     if (val !== undefined && val !== null && val !== '') {
-      rawParts.push(String(val).toLowerCase());
+      const s = String(val).trim();
+      if (s.length > 0 && s.length < 5000) {
+        rawParts.push(s.toLowerCase());
+      }
     }
   }
   const rawBlob = rawParts.join(' ');
@@ -137,6 +182,27 @@ export const getRowSearchBlob = (row) => {
     row._searchBlob = data;
   }
   return data;
+};
+
+// Case-insensitive & normalized column cell retriever (guarantees matching regardless of column casing)
+export const getRowCellValue = (row, colName) => {
+  if (!row || !colName) return '';
+  if (row[colName] !== undefined && row[colName] !== null) return row[colName];
+
+  const lower = String(colName).toLowerCase();
+  if (row[lower] !== undefined && row[lower] !== null) return row[lower];
+
+  const clean = lower.replace(/[\s_\-]+/g, '');
+  if (row[clean] !== undefined && row[clean] !== null) return row[clean];
+
+  const keys = Object.keys(row);
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (k.toLowerCase() === lower || k.toLowerCase().replace(/[\s_\-]+/g, '') === clean) {
+      return row[k];
+    }
+  }
+  return '';
 };
 
 const checkSingleCell = (cellValue, prep) => {
@@ -180,6 +246,13 @@ const checkSingleCell = (cellValue, prep) => {
 
   // Tier 0: Direct Raw Match (Instant substring check)
   if (rawCell.includes(prep.rawQuery)) return true;
+
+  // Tier 0.5: Legal Deed & Term Synonym Match (assignment ⇄ असाईनमेंट, agreement ⇄ करारनामा / ॲग्रीमेंट, etc.)
+  if (prep.synonyms && prep.synonyms.length > 0) {
+    for (let i = 0; i < prep.synonyms.length; i++) {
+      if (rawCell.includes(prep.synonyms[i])) return true;
+    }
+  }
 
   const cellTrans = transliterate(rawCell);
 
@@ -291,6 +364,9 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
       len: w.length
     }));
 
+    const cleanQuery = rawQuery.replace(/[\s_\-]+/g, '');
+    const synonyms = deedSynonyms[rawQuery] || deedSynonyms[cleanQuery] || [];
+
     return {
       column: c.column,
       rawQuery,
@@ -300,6 +376,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
       querySkelClean,
       queryWords,
       queryWordMeta,
+      synonyms,
       isExact,
       isGlobal: c.column === 'ALL' || c.column === '_ALL_'
     };
@@ -309,7 +386,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
     const checkCriteria = (prep) => {
       // Handle numeric range filters (Price, Carpet Area)
       if (prep.isRange) {
-        const val = Number(row[prep.column] || 0);
+        const val = Number(getRowCellValue(row, prep.column) || 0);
         if (prep.min !== null && !isNaN(prep.min) && val < prep.min) return false;
         if (prep.max !== null && !isNaN(prep.max) && val > prep.max) return false;
         return true;
@@ -327,8 +404,10 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
             }
           }
 
-          for (let i = 0; i < searchableColumns.length; i++) {
-            const col = searchableColumns[i];
+          const keys = Object.keys(row);
+          for (let i = 0; i < keys.length; i++) {
+            const col = keys[i];
+            if (col.startsWith('_')) continue;
             if (row[col] && checkSingleCell(row[col], prep)) return true;
           }
           return false;
@@ -337,6 +416,12 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
         const blob = getRowSearchBlob(row);
         // Tier 0: Direct Raw Substring in whole row blob
         if (blob.rawBlob.includes(prep.rawQuery)) return true;
+        // Tier 0.5: Legal Deed & Term Synonym Match in global search
+        if (prep.synonyms && prep.synonyms.length > 0) {
+          for (let i = 0; i < prep.synonyms.length; i++) {
+            if (blob.rawBlob.includes(prep.synonyms[i])) return true;
+          }
+        }
         // Tier 1: Transliterated Substring in whole row blob
         if (blob.transBlob.includes(prep.queryTrans)) return true;
         // Tier 2: Phonetic Skeleton in whole row blob
@@ -371,7 +456,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
         return false;
       }
 
-      return checkSingleCell(row[prep.column], prep);
+      return checkSingleCell(getRowCellValue(row, prep.column), prep);
     };
 
     if (matchMode === 'AND') {

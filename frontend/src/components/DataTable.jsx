@@ -25,20 +25,41 @@ const DataTable = ({ data, onDeleteRow }) => {
     for (let i = 0; i < limit; i++) {
       const keys = Object.keys(safeData[i]);
       for (let j = 0; j < keys.length; j++) {
-        colSet.add(keys[j]);
+        const k = keys[j];
+        if (k.startsWith('_')) continue;
+        colSet.add(k);
       }
     }
-    return Array.from(colSet);
+    const cols = Array.from(colSet);
+    // Prioritize original casing (e.g. DocNo before docno) and deduplicate casing variants
+    cols.sort((a, b) => {
+      const aIsMixed = a !== a.toLowerCase();
+      const bIsMixed = b !== b.toLowerCase();
+      if (aIsMixed && !bIsMixed) return -1;
+      if (!aIsMixed && bIsMixed) return 1;
+      return 0;
+    });
+    const finalCols = [];
+    const lowerSeen = new Set();
+    for (let i = 0; i < cols.length; i++) {
+      const c = cols[i];
+      const l = c.toLowerCase().replace(/[\s_\-]+/g, '');
+      if (!lowerSeen.has(l)) {
+        lowerSeen.add(l);
+        finalCols.push(c);
+      }
+    }
+    return finalCols;
   }, [safeData]);
 
   const isPropertyData = useMemo(() => {
     if (safeData.length === 0) return false;
     const first = safeData[0];
-    return Boolean(first.docno || first.society || first.consideration_amt || first.propertydescription);
+    return Boolean(first.docno || first.DocNo || first.society || first.consideration_amt || first.propertydescription || first.PropertyDescription);
   }, [safeData]);
 
   const visibleColumns = useMemo(() => {
-    return allColumns.filter(c => !hiddenCols.has(c));
+    return allColumns.filter(c => !hiddenCols.has(c.toLowerCase()));
   }, [allColumns, hiddenCols]);
 
   // Reset page when data changes

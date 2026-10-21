@@ -61,6 +61,12 @@ export function isRealEstateRecord(rawRow) {
     rawRow.sroname || 
     rawRow.sellerparty || 
     rawRow.purchaserparty || 
+    rawRow.DocNo || 
+    rawRow.PropertyDescription || 
+    rawRow.SROCode || 
+    rawRow.SROName || 
+    rawRow.SellerParty || 
+    rawRow.PurchaserParty || 
     rawRow.consideration_amt !== undefined || 
     rawRow.stampdutypaid !== undefined ||
     rawRow.marketvalue !== undefined
@@ -73,14 +79,16 @@ export function enrichRow(rawRow) {
     return { ...rawRow };
   }
 
-  const desc = rawRow.propertydescription || '';
+  const desc = rawRow.propertydescription || rawRow.PropertyDescription || rawRow.property_description || '';
   const society = rawRow.society || extractSociety(desc);
   const carpetSqft = rawRow.carpet_sqft || extractCarpetArea(desc) || '';
   const flatNo = rawRow.flat_no || extractFlatNo(desc) || '';
-  const consAmt = parseFloat(rawRow.consideration_amt) || 0;
-  const mktVal = parseFloat(rawRow.marketvalue) || 0;
-  const stampDuty = parseFloat(rawRow.stampdutypaid) || 0;
-  const regFee = parseFloat(rawRow.registrationfees) || 0;
+  const consAmt = parseFloat(rawRow.consideration_amt || rawRow.Consideration_Amt || rawRow.consideration || 0) || 0;
+  const mktVal = parseFloat(rawRow.marketvalue || rawRow.MarketValue || 0) || 0;
+  const stampDuty = parseFloat(rawRow.stampdutypaid || rawRow.StampDutyPaid || 0) || 0;
+  const regFee = parseFloat(rawRow.registrationfees || rawRow.RegistrationFees || 0) || 0;
+  const sellerParty = rawRow.sellerparty || rawRow.SellerParty || '';
+  const purchaserParty = rawRow.purchaserparty || rawRow.PurchaserParty || '';
 
   let rateSqft = rawRow.rate_per_sqft || '';
   if (!rateSqft && carpetSqft && carpetSqft > 100 && consAmt > 100000) {
@@ -97,7 +105,7 @@ export function enrichRow(rawRow) {
     marketvalue: mktVal,
     stampdutypaid: stampDuty,
     registrationfees: regFee,
-    sellerparty: cleanParties(rawRow.sellerparty),
-    purchaserparty: cleanParties(rawRow.purchaserparty)
+    sellerparty: cleanParties(sellerParty),
+    purchaserparty: cleanParties(purchaserParty)
   };
 }

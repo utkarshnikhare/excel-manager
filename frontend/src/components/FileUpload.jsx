@@ -4,6 +4,41 @@ import { parsePdfBuffer } from '../utils/pdfParser';
 import { parseImageFile } from '../utils/imageParser';
 import PasswordPromptModal from './PasswordPromptModal';
 
+export function normalizeRowData(rawRow, fileName, sheetName, _rowIdx) {
+  const row = { ...rawRow };
+  row.source_file = fileName;
+  row.source_sheet = sheetName;
+
+  // Generate lowercase & clean aliases for every property in rawRow so all schemas are recognized
+  const keys = Object.keys(rawRow);
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    const cleanKey = k.toLowerCase().replace(/[\s_\-]+/g, '');
+    if (row[cleanKey] === undefined) {
+      row[cleanKey] = rawRow[k];
+    }
+  }
+
+  // Canonical aliases for real estate & government records
+  if (!row.docno) row.docno = row.doc_no || row.documentno || '';
+  if (!row.docname) row.docname = row.doc_name || row.documentname || '';
+  if (!row.sellerparty) row.sellerparty = row.seller_party || '';
+  if (!row.purchaserparty) row.purchaserparty = row.purchaser_party || '';
+  if (!row.propertydescription) row.propertydescription = row.property_description || '';
+  if (!row.registrationdate) row.registrationdate = row.registration_date || '';
+  if (!row.sroname) row.sroname = row.sro_name || '';
+  if (!row.srocode) row.srocode = row.sro_code || '';
+  if (!row.areaname) row.areaname = row.area_name || '';
+  if (row.consideration_amt === undefined) {
+    row.consideration_amt = row.consideration || row.considerationamt || 0;
+  }
+  if (row.marketvalue === undefined) {
+    row.marketvalue = row.market_value || 0;
+  }
+
+  return enrichRow(row);
+}
+
 const FileUpload = ({ onDataParsed }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
@@ -169,17 +204,13 @@ const FileUpload = ({ onDataParsed }) => {
           const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
           for (let r = 0; r < rawRows.length; r++) {
-            const row = rawRows[r];
-            row.source_file = file.name;
-            row.source_sheet = sheetName;
+            const enriched = normalizeRowData(rawRows[r], file.name, sheetName, r);
             // High-speed deduplication key (no JSON.stringify overhead, scales to 100,000+ rows)
-            const dedupeKey = row.docno 
-              ? `${file.name}_${row.srocode || ''}_${row.docno}_${row.registrationdate || ''}` 
+            const dedupeKey = enriched.docno 
+              ? `${file.name}_${enriched.srocode || ''}_${enriched.docno}_${enriched.registrationdate || ''}` 
               : `${file.name}_s${s}_r${r}`;
             if (!seenRecords.has(dedupeKey)) {
               seenRecords.add(dedupeKey);
-              // Auto-enrich real estate properties if present, preserve generic data as-is
-              const enriched = enrichRow(row);
               combinedData.push(enriched);
             }
           }
