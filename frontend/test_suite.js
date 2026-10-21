@@ -80,6 +80,28 @@ const orResults = executeSmartSearch(sampleData, [
 ], 'OR');
 assert(orResults.length === 2, 'Search: Multi-column OR logic (Nagpur OR Nashik returns 2 records)');
 
+// 13. Elimination of False Positives: "ashwini" vs "yashvant", "kesavan", "vishwanath", "viresh vinod"
+const falsePositiveDataset = [
+  { DocNo: '5540', DocName: 'अँग्रीमेंट टू सेल', PurchaserParty: '{"संदीप रघुनाथ लोखंडे--","अश्विनी संदीप लोखंडे--"}' },
+  { DocNo: '8084', DocName: 'असाईनमेंट डीड', PurchaserParty: '{"अश्विनी संदीप लोखंडे--","संदीप रघुनाथ लोखंडे--"}' },
+  { DocNo: '11675', DocName: 'अँग्रीमेंट टू सेल', PurchaserParty: '{शामलयशवंतपवार,यशवंतरघुनाथपवार}' },
+  { DocNo: '8633', DocName: 'अँग्रीमेंट टू सेल', PurchaserParty: '{"औथिकेसवन कुमार--","उषा कुमार--"}' },
+  { DocNo: '862', DocName: 'Agreement Relating to Deposit of Title Deeds', PurchaserParty: '{VISHWANATHNAMDEOCHAUDHARI}' },
+  { DocNo: '916', DocName: 'Agreement Relating to Deposit of Title Deeds', PurchaserParty: '{VIRESHVINODKALEDHONKAR}' }
+];
+
+const ashwiniAgrement = executeSmartSearch(falsePositiveDataset, [
+  { column: 'PurchaserParty', query: 'ashwini' },
+  { column: 'DocName', query: 'agrement' }
+], 'AND');
+assert(ashwiniAgrement.length === 1 && ashwiniAgrement[0].DocNo === '5540', 'Strict Match: "ashwini" + "agrement" returns EXACTLY 1 record (DocNo 5540) eliminating 28 false positives');
+
+const ashwiniAssignment = executeSmartSearch(falsePositiveDataset, [
+  { column: 'PurchaserParty', query: 'ashwini' },
+  { column: 'DocName', query: 'assignment' }
+], 'AND');
+assert(ashwiniAssignment.length === 1 && ashwiniAssignment[0].DocNo === '8084', 'Strict Match: "ashwini" + "assignment" returns EXACTLY 1 record (DocNo 8084)');
+
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passedTests}/${totalTests} TESTS PASSED!`);
 console.log(`========================================\n`);

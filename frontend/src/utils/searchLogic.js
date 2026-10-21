@@ -64,10 +64,12 @@ export const deedSynonyms = {
   'assignment': ['असाईनमेंट', 'असाइनमेंट', 'असाईंमेंट', 'असाईनमेंट डीड', 'assignment'],
   'असाईनमेंट': ['assignment', 'असाईनमेंट', 'असाइनमेंट', 'असाईंमेंट', 'assignment deed'],
   'असाइनमेंट': ['assignment', 'असाइनमेंट', 'असाईनमेंट'],
-  'agreement': ['अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट', 'करारनामा', 'करार', 'agreement'],
-  'करारनामा': ['agreement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट'],
-  'अँग्रीमेंट': ['agreement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
-  'अॅग्रीमेंट': ['agreement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
+  'agreement': ['अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट', 'करारनामा', 'करार', 'agreement', 'agrement'],
+  'agrement': ['अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट', 'करारनामा', 'करार', 'agreement', 'agrement'],
+  'करारनामा': ['agreement', 'agrement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट', 'अग्रीमेंट'],
+  'अँग्रीमेंट': ['agreement', 'agrement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
+  'अॅग्रीमेंट': ['agreement', 'agrement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
+  'अग्रीमेंट': ['agreement', 'agrement', 'करारनामा', 'अँग्रीमेंट', 'अॅग्रीमेंट'],
   'sale': ['खरेदीखत', 'विक्रीखत', 'सेल', 'खरेदी', 'sale'],
   'saledeed': ['खरेदीखत', 'विक्रीखत', 'सेल डीड', 'sale deed', 'saledeed'],
   'खरेदीखत': ['sale deed', 'sale', 'खरेदीखत', 'विक्रीखत', 'सेल डीड'],
@@ -181,10 +183,11 @@ export const getRowSearchBlob = (row) => {
   }
   const rawBlob = rawParts.join(' ');
   const transBlob = transliterate(rawBlob);
-  const skelBlob = getSkeleton(transBlob);
-  const words = Array.from(new Set(transBlob.split(/\s+/).filter(w => w.length >= 4)));
+  const words = Array.from(new Set(transBlob.split(/\s+/).filter(w => w.length >= 2)));
+  const wordSkels = words.map(w => getSkeleton(w));
+  const skelBlob = wordSkels.join(' ');
 
-  const data = { rawBlob, transBlob, skelBlob, words };
+  const data = { rawBlob, transBlob, skelBlob, words, wordSkels };
   try {
     Object.defineProperty(row, '_searchBlob', {
       value: data,
@@ -231,9 +234,20 @@ const checkSingleCell = (cellValue, prep) => {
 
   // If Exact Match is requested (either prep.isExact is true or query had quotes)
   if (prep.isExact) {
+    // Fast path: direct raw equality or inclusion of raw query
+    if (rawCell === prep.rawQuery || rawCell.includes(prep.rawQuery) || cleanCell === prep.cleanQuery || cleanCell.includes(prep.cleanQuery)) return true;
+
     // If checking dates (e.g. year "2024" matching "15/04/2024")
     if (prep.column === 'registrationdate' || /^\d{4}$/.test(prep.rawQuery)) {
       if (rawCell.includes(prep.rawQuery)) return true;
+    }
+
+    // Deed synonym check in exact mode
+    if (prep.synonyms && prep.synonyms.length > 0) {
+      for (let i = 0; i < prep.synonyms.length; i++) {
+        const syn = prep.synonyms[i];
+        if (rawCell.includes(syn) || cleanCell.includes(syn)) return true;
+      }
     }
 
     const qClean = prep.queryTransClean;
@@ -244,15 +258,28 @@ const checkSingleCell = (cellValue, prep) => {
     if (cellClean === qClean || cleanParty(rawCell) === qClean) return true;
     if (Math.abs(cellClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(cellClean) === qSkel) return true;
 
-    // 2. Individual party equality (for multi-person cells e.g. "1) Person A 2) Person B")
-    if (rawCell.includes(')') || rawCell.includes(',') || rawCell.includes('\n') || rawCell.includes(';')) {
-      const parties = rawCell.split(/(?:\d+\)\s*|,|\n|;)/);
-      for (let i = 0; i < parties.length; i++) {
-        const p = parties[i].trim();
-        if (!p) continue;
-        const pClean = cleanParty(p.replace(/[{}"\[\]\(\)\-\-]/g, ' '));
-        if (pClean === qClean) return true;
-        if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
+    // 2. Individual party equality and word-level party match
+    const parties = (rawCell.includes(')') || rawCell.includes(',') || rawCell.includes('\n') || rawCell.includes(';'))
+      ? rawCell.split(/(?:\d+\)\s*|,|\n|;)/)
+      : [rawCell];
+
+    for (let i = 0; i < parties.length; i++) {
+      const p = parties[i].trim();
+      if (!p) continue;
+      const pClean = cleanParty(p.replace(/[{}"\[\]\(\)\-\-]/g, ' '));
+      if (pClean === qClean) return true;
+      if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
+
+      // Word-level strict matching within party only if query is a single word (e.g. searching "ashwini" matches "ashwini sandip lokhande")
+      // If user typed full multi-word name (e.g. "Dnyaneshwar Patil"), in exact mode it must match the exact person (not someone with a middle name)
+      if (prep.queryWordMeta && prep.queryWordMeta.length === 1) {
+        const pWords = pClean.split(/\s+/).filter(Boolean);
+        const qMeta = prep.queryWordMeta[0];
+        for (const pw of pWords) {
+          if (pw === qMeta.word || (qMeta.len >= 3 && pw.startsWith(qMeta.word))) return true;
+          const pwSkel = getSkeleton(pw);
+          if (pwSkel === qMeta.skel || (qMeta.skel.length >= 4 && pwSkel.startsWith(qMeta.skel))) return true;
+        }
       }
     }
 
@@ -276,13 +303,7 @@ const checkSingleCell = (cellValue, prep) => {
   // Tier 1: Fast Transliterated Substring Match
   if (cellTrans.includes(prep.queryTrans) || cellTransClean.includes(prep.queryTrans) || (prep.cleanQueryTrans && cellTransClean.includes(prep.cleanQueryTrans))) return true;
 
-  const cellSkel = getSkeleton(cellTrans);
-  const cellSkelClean = getSkeleton(cellTransClean);
-
-  // Tier 2: Fast Phonetic Skeleton Match
-  if (prep.querySkel.length > 1 && (cellSkel.includes(prep.querySkel) || cellSkelClean.includes(prep.querySkel))) return true;
-
-  // Tier 3: Multi-Word Matcher (Typos & partial words)
+  // Tier 2: Multi-Word Matcher (Typos & partial words with strict word-level skeleton matching)
   if (prep.queryWordMeta.length > 0) {
     const cellWords = (cellTransClean || cellTrans).split(/\s+/).filter(w => w.length > 0);
     let matchedWordsCount = 0;
@@ -291,12 +312,15 @@ const checkSingleCell = (cellValue, prep) => {
       let wordMatched = false;
 
       for (let cWord of cellWords) {
-        if (cWord.includes(qMeta.word)) {
+        if (cWord.includes(qMeta.word) || (qMeta.len >= 3 && cWord.startsWith(qMeta.word))) {
           wordMatched = true;
           break;
         }
 
-        if (qMeta.skel.length > 1 && getSkeleton(cWord).includes(qMeta.skel)) {
+        const cSkel = getSkeleton(cWord);
+        // STRICT WORD-LEVEL SKELETON MATCH: Exact skeleton equality or prefix (if query >= 4)
+        // Prevents short query skeleton like 'svn' (ashwini) from substring matching inside 'ysvnt' (yashvant) or 'ksvn' (kesavan)
+        if (cSkel === qMeta.skel || (qMeta.skel.length >= 4 && cSkel.startsWith(qMeta.skel))) {
           wordMatched = true;
           break;
         }
@@ -431,11 +455,34 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
       if (prep.isGlobal) {
         if (prep.isExact) {
           const blob = getRowSearchBlob(row);
-          // Fast filter: row blob must at least contain the first word or skeleton token
-          const firstWord = prep.queryWords[0] || prep.rawQuery;
-          if (firstWord && !blob.rawBlob.includes(firstWord) && !blob.transBlob.includes(firstWord)) {
+          // Fast filter: row blob must at least contain the exact raw query or clean query or first skeleton token
+          if (!blob.rawBlob.includes(prep.rawQuery) && !blob.transBlob.includes(prep.rawQuery) &&
+              (!prep.cleanQuery || (!blob.rawBlob.includes(prep.cleanQuery) && !blob.transBlob.includes(prep.cleanQuery)))) {
+            // For multi-word queries, every word must at least exist in the row
+            if (prep.queryWords && prep.queryWords.length > 1) {
+              let allWordsPresent = true;
+              for (let i = 0; i < prep.queryWords.length; i++) {
+                const qw = prep.queryWords[i];
+                if (!blob.rawBlob.includes(qw) && !blob.transBlob.includes(qw)) {
+                  allWordsPresent = false;
+                  break;
+                }
+              }
+              if (!allWordsPresent) return false;
+            }
+
             const firstSkel = prep.queryWordMeta[0]?.skel;
-            if (!firstSkel || !blob.skelBlob.includes(firstSkel)) {
+            let foundSkel = false;
+            if (firstSkel && blob.wordSkels) {
+              for (let i = 0; i < blob.wordSkels.length; i++) {
+                const wSkel = blob.wordSkels[i];
+                if (wSkel === firstSkel || (firstSkel.length >= 4 && wSkel.startsWith(firstSkel))) {
+                  foundSkel = true;
+                  break;
+                }
+              }
+            }
+            if (!foundSkel) {
               return false;
             }
           }
@@ -460,15 +507,25 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
         }
         // Tier 1: Transliterated Substring in whole row blob
         if (blob.transBlob.includes(prep.queryTrans) || (prep.cleanQueryTrans && blob.transBlob.includes(prep.cleanQueryTrans))) return true;
-        // Tier 2: Phonetic Skeleton in whole row blob
-        if (prep.querySkel.length > 1 && blob.skelBlob.includes(prep.querySkel)) return true;
 
-        // Tier 3: Multi-word query (all words must match)
+        // Tier 2: Multi-word query with strict word-level skeleton matching (all words must match)
         if (prep.queryWordMeta.length > 0) {
           let allWordsMatched = true;
           for (let qMeta of prep.queryWordMeta) {
             if (blob.transBlob.includes(qMeta.word)) continue;
-            if (qMeta.skel.length > 1 && blob.skelBlob.includes(qMeta.skel)) continue;
+
+            // Strict word-level skeleton match over indexed row words
+            let wordSkelMatched = false;
+            if (qMeta.skel && blob.wordSkels) {
+              for (let i = 0; i < blob.wordSkels.length; i++) {
+                const wSkel = blob.wordSkels[i];
+                if (wSkel === qMeta.skel || (qMeta.skel.length >= 4 && wSkel.startsWith(qMeta.skel))) {
+                  wordSkelMatched = true;
+                  break;
+                }
+              }
+            }
+            if (wordSkelMatched) continue;
 
             // Fast fuzzy check against row's distinct words (alphabetic only)
             let fuzzyMatched = false;
