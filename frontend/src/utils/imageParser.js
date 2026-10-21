@@ -49,6 +49,12 @@ export async function parseImageFile(file) {
           if (valMatch) row.consideration_amt = parseFloat(valMatch[1].replace(/,/g, ''));
         }
 
+        // Intelligent fallback: Extract document number or year from filename if OCR is unavailable in current browser
+        if (!row.docno) {
+          const docMatch = file.name.match(/(?:doc|deed|no|rec)?[-_\s]?(\d{4,6})/i);
+          if (docMatch) row.docno = docMatch[1];
+        }
+
         resolve([enrichRow(row)]);
       };
 

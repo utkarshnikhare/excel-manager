@@ -4,64 +4,72 @@ import { enrichRow } from './propertyParser.js';
 export function parseIgrIndex2Text(fullText, fileName) {
   const records = [];
 
-  // Match document number: e.g. "दस्तऐवज क्र. : 16060 / 2024" or "Doc No: 16060"
-  const docNoMatch = fullText.match(/(?:दस्तऐवज\s*(?:क्र\.|क्रमांक)|Doc\s*No\.?)\s*[:\-]?\s*(\d+)/i);
-  const docNo = docNoMatch ? docNoMatch[1] : '';
+  // Split by deed header markers if multiple deeds exist in the text
+  const deedBlocks = fullText.split(/(?=(?:दस्तऐवज\s*(?:क्र\.|क्रमांक)|Doc\s*No\.?)\s*[:\-])/i).filter(b => b.trim().length > 30);
+  const blocksToProcess = deedBlocks.length > 0 ? deedBlocks : [fullText];
 
-  // Match registration date: e.g. "नोंदणी दिनांक : 15/04/2024" or "Date: 15/04/2024"
-  const dateMatch = fullText.match(/(?:नोंदणी\s*दिनांक|Reg(?:istration)?\s*Date)\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i) ||
-                    fullText.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/);
-  const regDate = dateMatch ? dateMatch[1] : '';
+  for (let bIdx = 0; bIdx < blocksToProcess.length; bIdx++) {
+    const block = blocksToProcess[bIdx];
 
-  // Match document name: e.g. "खरेदीखत" or "Agreement to Sale"
-  const docNameMatch = fullText.match(/(?:दस्तऐवजाचा\s*प्रकार|Deed\s*Type|Document\s*Type)\s*[:\-]?\s*([^\n\r]+)/i);
-  const docName = docNameMatch ? docNameMatch[1].trim() : (fullText.includes('खरेदीखत') ? 'खरेदीखत (Sale Deed)' : (fullText.includes('गहाणखत') ? 'गहाणखत (Mortgage)' : 'Index-II Deed'));
+    // Match document number: e.g. "दस्तऐवज क्र. : 16060 / 2024" or "Doc No: 16060"
+    const docNoMatch = block.match(/(?:दस्तऐवज\s*(?:क्र\.|क्रमांक)|Doc\s*No\.?)\s*[:\-]?\s*(\d+)/i);
+    const docNo = docNoMatch ? docNoMatch[1] : '';
 
-  // Match SRO office: e.g. "हवेली क्र. ३" or "Haveli No. 3"
-  const sroMatch = fullText.match(/(?:दुय्यम\s*निबंधक|SRO)\s*[:\-]?\s*([^\n\r]+)/i);
-  const sroName = sroMatch ? sroMatch[1].trim() : 'हवेली (Haveli)';
+    // Match registration date: e.g. "नोंदणी दिनांक : 15/04/2024" or "Date: 15/04/2024"
+    const dateMatch = block.match(/(?:नोंदणी\s*दिनांक|Reg(?:istration)?\s*Date)\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i) ||
+                      block.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/);
+    const regDate = dateMatch ? dateMatch[1] : '';
 
-  // Financial amounts: Consideration & Market Value
-  const consMatch = fullText.match(/(?:मोबदला|Consideration(?:\s*Amount)?)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-  const consAmt = consMatch ? parseFloat(consMatch[1].replace(/,/g, '')) : 0;
+    // Match document name: e.g. "खरेदीखत" or "Agreement to Sale"
+    const docNameMatch = block.match(/(?:दस्तऐवजाचा\s*प्रकार|Deed\s*Type|Document\s*Type)\s*[:\-]?\s*([^\n\r]+)/i);
+    const docName = docNameMatch ? docNameMatch[1].trim() : (block.includes('खरेदीखत') ? 'खरेदीखत (Sale Deed)' : (block.includes('गहाणखत') ? 'गहाणखत (Mortgage)' : 'Index-II Deed'));
 
-  const mktMatch = fullText.match(/(?:बाजारभाव|Market\s*Value)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-  const mktVal = mktMatch ? parseFloat(mktMatch[1].replace(/,/g, '')) : 0;
+    // Match SRO office: e.g. "हवेली क्र. ३" or "Haveli No. 3"
+    const sroMatch = block.match(/(?:दुय्यम\s*निबंधक|SRO)\s*[:\-]?\s*([^\n\r]+)/i);
+    const sroName = sroMatch ? sroMatch[1].trim() : 'हवेली (Haveli)';
 
-  const stampMatch = fullText.match(/(?:मुद्रांक\s*शुल्क|Stamp\s*Duty)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-  const stampDuty = stampMatch ? parseFloat(stampMatch[1].replace(/,/g, '')) : 0;
+    // Financial amounts: Consideration & Market Value
+    const consMatch = block.match(/(?:मोबदला|Consideration(?:\s*Amount)?)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
+    const consAmt = consMatch ? parseFloat(consMatch[1].replace(/,/g, '')) : 0;
 
-  const regFeeMatch = fullText.match(/(?:नोंदणी\s*फी|Registration\s*Fee)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-  const regFee = regFeeMatch ? parseFloat(regFeeMatch[1].replace(/,/g, '')) : 0;
+    const mktMatch = block.match(/(?:बाजारभाव|Market\s*Value)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
+    const mktVal = mktMatch ? parseFloat(mktMatch[1].replace(/,/g, '')) : 0;
 
-  // Parties: Seller / Denara & Buyer / Ghenara
-  const sellerMatch = fullText.match(/(?:दस्तऐवज\s*करून\s*देणारा|Seller|Licensor)\s*[:\-]?\s*([^\n\r]+)/i);
-  const sellerParty = sellerMatch ? sellerMatch[1].trim() : '';
+    const stampMatch = block.match(/(?:मुद्रांक\s*शुल्क|Stamp\s*Duty)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
+    const stampDuty = stampMatch ? parseFloat(stampMatch[1].replace(/,/g, '')) : 0;
 
-  const buyerMatch = fullText.match(/(?:दस्तऐवज\s*करून\s*घेणारा|Purchaser|Buyer|Licensee)\s*[:\-]?\s*([^\n\r]+)/i);
-  const buyerParty = buyerMatch ? buyerMatch[1].trim() : '';
+    const regFeeMatch = block.match(/(?:नोंदणी\s*फी|Registration\s*Fee)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
+    const regFee = regFeeMatch ? parseFloat(regFeeMatch[1].replace(/,/g, '')) : 0;
 
-  // Property Description: Flat no, Survey No, Society
-  const descMatch = fullText.match(/(?:मिळकतीचे\s*वर्णन|Property\s*Description)\s*[:\-]?\s*([\s\S]+?)(?=(?:इतर\s*माहिती|नोंदणी\s*दिनांक|$))/i);
-  const propDesc = descMatch ? descMatch[1].trim().replace(/\s+/g, ' ') : fullText.slice(0, 300);
+    // Parties: Seller / Denara & Buyer / Ghenara
+    const sellerMatch = block.match(/(?:दस्तऐवज\s*करून\s*देणारा|Seller|Licensor)\s*[:\-]?\s*([^\n\r]+)/i);
+    const sellerParty = sellerMatch ? sellerMatch[1].trim() : '';
 
-  const parsedRow = {
-    docno: docNo || String(Math.floor(1000 + Math.random() * 9000)),
-    registrationdate: regDate || '—',
-    docname: docName,
-    sroname: sroName,
-    consideration_amt: consAmt,
-    marketvalue: mktVal,
-    stampdutypaid: stampDuty,
-    registrationfees: regFee,
-    sellerparty: sellerParty || 'Parties per Index-II',
-    purchaserparty: buyerParty || 'Allottee per Index-II',
-    propertydescription: propDesc,
-    source_file: fileName,
-    source_sheet: 'PDF_Extract'
-  };
+    const buyerMatch = block.match(/(?:दस्तऐवज\s*करून\s*घेणारा|Purchaser|Buyer|Licensee)\s*[:\-]?\s*([^\n\r]+)/i);
+    const buyerParty = buyerMatch ? buyerMatch[1].trim() : '';
 
-  records.push(enrichRow(parsedRow));
+    // Property Description: Flat no, Survey No, Society
+    const descMatch = block.match(/(?:मिळकतीचे\s*वर्णन|Property\s*Description)\s*[:\-]?\s*([\s\S]+?)(?=(?:इतर\s*माहिती|नोंदणी\s*दिनांक|$))/i);
+    const propDesc = descMatch ? descMatch[1].trim().replace(/\s+/g, ' ') : block.slice(0, 300);
+
+    const parsedRow = {
+      docno: docNo || String(1000 + bIdx),
+      registrationdate: regDate || '—',
+      docname: docName,
+      sroname: sroName,
+      consideration_amt: consAmt,
+      marketvalue: mktVal,
+      stampdutypaid: stampDuty,
+      registrationfees: regFee,
+      sellerparty: sellerParty || 'Parties per Index-II',
+      purchaserparty: buyerParty || 'Allottee per Index-II',
+      propertydescription: propDesc,
+      source_file: fileName,
+      source_sheet: 'PDF_Extract'
+    };
+
+    records.push(enrichRow(parsedRow));
+  }
   return records;
 }
 

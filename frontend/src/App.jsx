@@ -132,9 +132,29 @@ function App() {
     if (!exportData || exportData.length === 0) return;
     try {
       const XLSX = await import('xlsx');
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      // Clean rows: remove all internal metadata properties starting with '_'
+      const cleanRows = exportData.map(row => {
+        const cleanObj = {};
+        const keys = Object.keys(row);
+        for (let i = 0; i < keys.length; i++) {
+          const k = keys[i];
+          if (!k.startsWith('_')) {
+            cleanObj[k] = row[k];
+          }
+        }
+        return cleanObj;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(cleanRows);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, fileMeta?.activeSheet || "Filtered Data");
+
+      // Excel sheet name limit: max 31 characters, no invalid chars: \ / ? * [ ] :
+      let rawSheetName = fileMeta?.activeSheet || "Filtered Data";
+      const sanitizedSheetName = String(rawSheetName)
+        .replace(/[\\/?*\[\]:]/g, '_')
+        .slice(0, 31) || "Sheet1";
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, sanitizedSheetName);
       XLSX.writeFile(workbook, getExportFilename('xlsx'));
     } catch (err) {
       console.error('Failed to export Excel:', err);

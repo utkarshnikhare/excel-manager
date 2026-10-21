@@ -1,8 +1,27 @@
 // Real Estate & Maharashtra IGR Property Intelligence Parser
 
+export function normalizeDevanagariDigits(text) {
+  if (!text) return '';
+  const devDigits = { '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9' };
+  return String(text).replace(/[०-९]/g, ch => devDigits[ch] || ch);
+}
+
 export function extractSociety(desc) {
   if (!desc) return 'Other / Open Land';
   const str = String(desc);
+
+  // 1. Dynamic extraction: e.g. "Ganga Florentina Co-op Housing Society", "Amanora Towers", "Skyways Residency"
+  // eslint-disable-next-line no-misleading-character-class
+  const dynamicMatch = str.match(/([A-Za-z\u0900-\u097F\s]{3,35})\s+(?:co-?op(?:\s+housing)?\s+society|chs|apartment|apartments|residency|complex|heights|towers?|park|enclave|greens?|valley|villa|villas|city)/i);
+  if (dynamicMatch) {
+    const rawName = dynamicMatch[0].trim();
+    const cleaned = rawName.replace(/^(in|at|the|near|of|नाव|नावे)\s+/i, '').trim();
+    if (cleaned.length >= 4 && cleaned.length <= 40) {
+      return cleaned;
+    }
+  }
+
+  // 2. Known project landmarks & major builders
   if (/स्कायवेज|skyways/i.test(str)) return 'Skyways Esfera';
   if (/एरोपोलीस|एरोपोलिस|aeropolis/i.test(str)) return 'Aeropolis';
   if (/प्राईड|प्राइड|आशियाना|aashiyana|pride/i.test(str)) return 'Pride Aashiyana';
@@ -11,23 +30,50 @@ export function extractSociety(desc) {
   if (/साई शांती|shanti park/i.test(str)) return 'Sai Shanti Park';
   if (/मॅजेस्टिक|majestic/i.test(str)) return 'Majestic';
   if (/मोझे|moze/i.test(str)) return 'Moze Associates';
+  if (/अमानोरा|amanora/i.test(str)) return 'Amanora Park Town';
+  if (/रोहन|rohan/i.test(str)) return 'Rohan Builders';
+  if (/गोदरेज|godrej/i.test(str)) return 'Godrej Properties';
+  if (/गंगा|ganga/i.test(str)) return 'Goel Ganga';
+  if (/कुमार|kumar/i.test(str)) return 'Kumar Properties';
+
   if (/सदनिका|फ्लॅट|फलॅट|flat/i.test(str)) return 'Residential Flat';
   return 'Residential Property';
 }
 
 export function extractCarpetArea(desc) {
   if (!desc) return null;
-  const str = String(desc);
-  const sqftMatch = str.match(/([\d\.]+)\s*चौ\.?\s*फुट/i);
-  if (sqftMatch) return parseFloat(sqftMatch[1]);
-  const sqmMatch = str.match(/([\d\.]+)\s*चौ\.?\s*मी/i);
-  if (sqmMatch) return Math.round(parseFloat(sqmMatch[1]) * 10.7639 * 100) / 100;
+  const str = normalizeDevanagariDigits(String(desc));
+
+  // 1. Marathi sq.ft: e.g. "650 चौ.फुट" or "650 चौ फूट"
+  const mrSqftMatch = str.match(/([\d\.]+)\s*(?:चौ\.?\s*फुट|चौ\.?\s*फु)/i);
+  if (mrSqftMatch) return parseFloat(mrSqftMatch[1]);
+
+  // 2. English sq.ft: e.g. "820 sq.ft", "820 sq ft", "820 sqft", "820 square feet"
+  const enSqftMatch = str.match(/([\d\.]+)\s*(?:sq\.?\s*ft\.?|sqft|square\s*feet|sq\s*feet)/i);
+  if (enSqftMatch) return parseFloat(enSqftMatch[1]);
+
+  // 3. Marathi sq.mtr: e.g. "50 चौ.मी" or "50 चौ. मी."
+  const mrSqmMatch = str.match(/([\d\.]+)\s*(?:चौ\.?\s*मी|चौ\.?\s*मिटर)/i);
+  if (mrSqmMatch) return Math.round(parseFloat(mrSqmMatch[1]) * 10.7639 * 100) / 100;
+
+  // 4. English sq.mtr: e.g. "50 sq.mtr", "50 sq mtr", "50 sqmt"
+  const enSqmMatch = str.match(/([\d\.]+)\s*(?:sq\.?\s*m(?:tr)?\.?|sqmt|square\s*meters?)/i);
+  if (enSqmMatch) return Math.round(parseFloat(enSqmMatch[1]) * 10.7639 * 100) / 100;
+
+  // 5. Explicit area keyword: e.g. "Carpet Area 750" or "क्षेत्रफळ 750"
+  const areaMatch = str.match(/(?:carpet\s*area|area|क्षेत्रफळ)\s*[:\-]?\s*([\d\.]+)/i);
+  if (areaMatch) {
+    const val = parseFloat(areaMatch[1]);
+    if (val >= 100 && val <= 10000) return val;
+  }
+
   return null;
 }
 
 export function extractFlatNo(desc) {
   if (!desc) return '';
-  const match = String(desc).match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|office|flat)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?)?\s*([A-Za-z0-9\-]+)/i);
+  const str = normalizeDevanagariDigits(String(desc));
+  const match = str.match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|office|flat|shop|unit|plot|bungalow|row\s*house)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?)?\s*([A-Za-z0-9\-\/]+)/i);
   return match ? match[1] : '';
 }
 

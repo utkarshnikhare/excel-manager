@@ -18,6 +18,7 @@ const devanagariMap = {
 };
 
 const hasDevanagari = /[\u0900-\u097F]/;
+const labialConsonants = new Set(['प', 'फ', 'ब', 'भ', 'म', 'p', 'b', 'm']);
 
 export const transliterate = (text) => {
   if (!text) return "";
@@ -31,18 +32,28 @@ export const transliterate = (text) => {
   const normalized = str.replace(/[\u094D\u200C\u200D]/g, '').toLowerCase();
   for (let i = 0; i < normalized.length; i++) {
     const char = normalized[i];
+    // Contextual anusvara: Before labials (प/फ/ब/भ/म/p/b/m), pronounced as 'm' (e.g. संभाजी -> sambhaji, मुंबई -> mumbai)
+    if (char === 'ं' || char === 'ँ') {
+      const nextChar = normalized[i + 1];
+      if (nextChar && labialConsonants.has(nextChar)) {
+        result += 'm';
+        continue;
+      }
+    }
     result += devanagariMap[char] || char;
   }
   return result;
 };
 
-// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f, dny=jny=gy=jn, th=t, dh=d, bh=b)
+// Consonant skeleton with Indian phonetic normalizations (v=w, s=sh, ph=f, dny=jny=gy=jn, th=t, dh=d, bh=b, x=ks)
 // Preserves word boundaries (spaces) to prevent false-positive cross-word bleed
 export const getSkeleton = (text) => {
   if (!text) return "";
   let normalized = String(text)
     .toLowerCase()
     .replace(/dny|jny|gy/g, 'jn')
+    .replace(/x/g, 'ks')
+    .replace(/jh|zh/g, 'j')
     .replace(/ph/g, 'f')
     .replace(/w/g, 'v')
     .replace(/sh/g, 's')
@@ -234,6 +245,16 @@ export const matchSingleCell = (cellValue, prep) => {
     if (rawCell === prep.rawQuery) return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact file' };
     if (rawCell.includes(prep.rawQuery)) return { matched: true, tier: 'EXACT', score: 95, reason: 'File match' };
     return { matched: false, tier: null, score: 0, reason: '' };
+  }
+
+  // Delimiter-Agnostic Compact Match (for Phone Numbers, Dates, Vehicles, Alphanumeric IDs)
+  // e.g. "9820011223" matches "98200-11223" or "+91 98200 11223"; "15/04/2024" matches "15-04-2024"; "MH12AB1234" matches "MH-12-AB-1234"
+  const compactCell = rawCell.replace(/[^a-z0-9]/g, '');
+  const compactQuery = prep.rawQuery.replace(/[^a-z0-9]/g, '');
+  if (compactQuery.length >= 4 && compactCell.length >= 4) {
+    if (compactCell === compactQuery || compactCell.includes(compactQuery)) {
+      return { matched: true, tier: 'EXACT', score: 98, reason: 'Identifier match (delimiter-agnostic)' };
+    }
   }
 
   // If Exact Match is requested (either prep.isExact is true or query had quotes)
@@ -500,7 +521,16 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
     const checkCriteria = (prep) => {
       // Handle numeric range filters (Price, Carpet Area)
       if (prep.isRange) {
-        const val = Number(getRowCellValue(row, prep.column) || 0);
+        const raw = getRowCellValue(row, prep.column);
+        if (raw === null || raw === undefined || raw === '' || raw === '—' || raw === 'N/A' || raw === 'null') {
+          return null;
+        }
+        // Extract numeric digits and decimal point, handling Indian commas (e.g. "75,00,000") and currency/units (e.g. "₹ 75,00,000", "820 sq.ft")
+        const cleanStr = String(raw).replace(/[^0-9\.]/g, '');
+        if (!cleanStr) return null;
+        const val = parseFloat(cleanStr);
+        if (isNaN(val)) return null;
+
         if (prep.min !== null && !isNaN(prep.min) && val < prep.min) return null;
         if (prep.max !== null && !isNaN(prep.max) && val > prep.max) return null;
         return { matched: true, tier: 'EXACT', score: 100, column: prep.column, reason: 'Range matched' };

@@ -1,4 +1,6 @@
 import { transliterate, getSkeleton, levenshtein, hashRecord, executeSmartSearch } from './src/utils/searchLogic.js';
+import { extractCarpetArea, extractFlatNo, extractSociety } from './src/utils/propertyParser.js';
+import { parseIgrIndex2Text } from './src/utils/pdfParser.js';
 
 console.log('🧪 RUNNING COMPREHENSIVE AUTOMATED TEST SUITE...\n');
 
@@ -101,6 +103,55 @@ const ashwiniAssignment = executeSmartSearch(falsePositiveDataset, [
   { column: 'DocName', query: 'assignment' }
 ], 'AND');
 assert(ashwiniAssignment.length === 1 && ashwiniAssignment[0].DocNo === '8084', 'Strict Match: "ashwini" + "assignment" returns EXACTLY 1 record (DocNo 8084)');
+
+// 14. Fix Verification: Range Filter with Indian Currency & Commas
+const rangeTestDataset = [
+  { DocNo: '1', consideration_amt: '75,00,000' },
+  { DocNo: '2', consideration_amt: '₹ 4,50,000' },
+  { DocNo: '3', consideration_amt: 'N/A' },
+  { DocNo: '4', consideration_amt: '—' }
+];
+const rangeUnder5L = executeSmartSearch(rangeTestDataset, [{ isRange: true, column: '_price_range_', min: 100000, max: 500000 }]);
+assert(rangeUnder5L.length === 1 && rangeUnder5L[0].DocNo === '2', 'Range Filter: 75,00,000 and N/A rejected; ₹ 4,50,000 correctly matched');
+
+// 15. Fix Verification: Delimiter-Agnostic Identifier Searches
+const delimiterDataset = [
+  { Phone: '+91 98200 11223', Date: '15-04-2024', Vehicle: 'MH-12-AB-1234', Unit: 'A-102' }
+];
+assert(executeSmartSearch(delimiterDataset, [{ column: 'Phone', query: '9820011223' }]).length === 1, 'Delimiter-Agnostic: "9820011223" matches "+91 98200 11223"');
+assert(executeSmartSearch(delimiterDataset, [{ column: 'Date', query: '15/04/2024' }]).length === 1, 'Delimiter-Agnostic: "15/04/2024" matches "15-04-2024"');
+assert(executeSmartSearch(delimiterDataset, [{ column: 'Vehicle', query: 'MH12AB1234' }]).length === 1, 'Delimiter-Agnostic: "MH12AB1234" matches "MH-12-AB-1234"');
+assert(executeSmartSearch(delimiterDataset, [{ column: 'Unit', query: 'A102' }]).length === 1, 'Delimiter-Agnostic: "A102" matches "A-102"');
+
+// 16. Fix Verification: Indian Phonetic Labial Anusvara & 'x' Normalization
+assert(getSkeleton(transliterate('संभाजी')) === getSkeleton('Sambhaji'), 'Phonetic: "संभाजी" matches "Sambhaji" (m before bh)');
+assert(getSkeleton(transliterate('मुंबई')) === getSkeleton('Mumbai'), 'Phonetic: "मुंबई" matches "Mumbai" (m before b)');
+assert(getSkeleton('Laxman') === getSkeleton('Lakshman'), 'Phonetic: "Laxman" matches "Lakshman" (x == ks)');
+assert(getSkeleton('Laxman') === getSkeleton(transliterate('लक्ष्मण')), 'Phonetic: "Laxman" matches "लक्ष्मण"');
+
+// 17. Fix Verification: Property Intelligence Parser (English sqft, Devanagari numerals, Dynamic Societies)
+assert(extractCarpetArea('Flat 504, Carpet Area 820 sq.ft') === 820, 'Property Parser: Extracts English "820 sq.ft"');
+assert(extractCarpetArea('सदनिका नं. ५०४, क्षेत्रफळ ६५० चौ.फूट') === 650, 'Property Parser: Extracts Devanagari numerals "६५० चौ.फूट" -> 650');
+assert(extractFlatNo('सदनिका नं. ५०४') === '504', 'Property Parser: Extracts Devanagari flat "सदनिका नं. ५०४" -> 504');
+assert(extractFlatNo('Shop No. G-05') === 'G-05', 'Property Parser: Extracts "Shop No. G-05"');
+assert(extractSociety('Skyline Residency Co-op Housing Society') === 'Skyline Residency Co-op Housing Society', 'Property Parser: Dynamically extracts society from description');
+
+// 18. Fix Verification: Multi-Deed PDF Parser
+const multiDeedText = `
+दस्तऐवज क्र. : 101 / 2024
+नोंदणी दिनांक : 10/01/2024
+मोबदला : ₹ 50,00,000
+दस्तऐवज करून देणारा : Vendor A
+दस्तऐवज करून घेणारा : Buyer A
+
+दस्तऐवज क्र. : 102 / 2024
+नोंदणी दिनांक : 15/01/2024
+मोबदला : ₹ 60,00,000
+दस्तऐवज करून देणारा : Vendor B
+दस्तऐवज करून घेणारा : Buyer B
+`;
+const pdfDeeds = parseIgrIndex2Text(multiDeedText, 'Batch.pdf');
+assert(pdfDeeds.length === 2 && pdfDeeds[0].docno === '101' && pdfDeeds[1].docno === '102', 'Multi-Deed PDF: Successfully extracts all deeds from multi-record text');
 
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passedTests}/${totalTests} TESTS PASSED!`);
