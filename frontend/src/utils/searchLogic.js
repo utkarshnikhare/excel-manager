@@ -1,11 +1,11 @@
 const devanagariMap = {
   'अ': 'a', 'आ': 'a', 'इ': 'i', 'ई': 'i', 'उ': 'u', 'ऊ': 'u', 'ए': 'e', 'ऐ': 'e', 'ओ': 'o', 'औ': 'o',
   'ऋ': 'r', 'ॠ': 'r', 'ऍ': 'a', 'ऑ': 'o',
-  'क': 'k', 'ख': 'k', 'ग': 'g', 'घ': 'g', 'ङ': 'n',
-  'च': 'ch', 'छ': 'ch', 'ज': 'j', 'झ': 'j', 'ञ': 'n',
-  'ट': 't', 'ठ': 't', 'ड': 'd', 'ढ': 'd', 'ण': 'n',
-  'त': 't', 'थ': 't', 'द': 'd', 'ध': 'd', 'न': 'n',
-  'प': 'p', 'फ': 'f', 'ब': 'b', 'भ': 'b', 'म': 'm',
+  'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'n',
+  'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'n',
+  'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+  'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n',
+  'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm',
   'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh', 'ष': 'sh', 'स': 's', 'ह': 'h',
   'ळ': 'l', 'क्ष': 'x', 'ज्ञ': 'jn',
   // Matras & modifiers
@@ -43,9 +43,6 @@ export const getSkeleton = (text) => {
   let normalized = String(text)
     .toLowerCase()
     .replace(/dny|jny|gy/g, 'jn')
-    .replace(/gn/g, 'n') // Silent English g before n (assignment, sign, design)
-    .replace(/kn/g, 'n') // Silent English k before n (know, knight)
-    .replace(/wr/g, 'r') // Silent English w before r (write, wrap)
     .replace(/ph/g, 'f')
     .replace(/w/g, 'v')
     .replace(/sh/g, 's')
@@ -82,6 +79,18 @@ export const deedSynonyms = {
   'mortgage': ['गहाणखत', 'तारण', 'मॉर्टगेज', 'mortgage'],
   'गहाणखत': ['mortgage', 'गहाणखत', 'मॉर्टगेज'],
   'gift': ['बक्षीसपत्र', 'दानपत्र', 'गिफ्ट', 'gift'],
+  'giftdeed': ['बक्षीसपत्र', 'दानपत्र', 'गिफ्ट डीड', 'गिफ्ट'],
+  'gift deed': ['बक्षीसपत्र', 'दानपत्र', 'गिफ्ट डीड', 'गिफ्ट'],
+  'assignmentdeed': ['असाईनमेंट डीड', 'असाइनमेंट डीड', 'असाईनमेंट'],
+  'assignment deed': ['असाईनमेंट डीड', 'असाइनमेंट डीड', 'असाईनमेंट'],
+  'releasedeed': ['हक्कसोडपत्र', 'सोडपत्र', 'रिलीज डीड'],
+  'release deed': ['हक्कसोडपत्र', 'सोडपत्र', 'रिलीज डीड'],
+  'partitiondeed': ['वाटपपत्र', 'पार्टिशन'],
+  'partition deed': ['वाटपपत्र', 'पार्टिशन'],
+  'mortgagedeed': ['गहाणखत', 'तारण', 'मॉर्टगेज'],
+  'mortgage deed': ['गहाणखत', 'तारण', 'मॉर्टगेज'],
+  'developmentagreement': ['विकास करार', 'विकसनकरारनामा', 'डेव्हलपमेंट'],
+  'development agreement': ['विकास करार', 'विकसनकरारनामा', 'डेव्हलपमेंट'],
   'बक्षीसपत्र': ['gift', 'बक्षीसपत्र', 'दानपत्र', 'गिफ्ट डीड'],
   'release': ['हक्कसोडपत्र', 'सोडपत्र', 'रिलीज', 'release'],
   'हक्कसोडपत्र': ['release', 'हक्कसोडपत्र', 'सोडपत्र', 'रिलीज डीड'],
@@ -162,6 +171,11 @@ export const getRowSearchBlob = (row) => {
       const s = String(val).trim();
       if (s.length > 0 && s.length < 5000) {
         rawParts.push(s.toLowerCase());
+        // Also add delimiter-cleaned version so formatting like {"name--"} separates cleanly
+        if (s.includes('{') || s.includes('}') || s.includes('"') || s.includes('--') || s.includes('[')) {
+          const cleanS = s.replace(/[{}"\[\]\(\)\-\-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+          if (cleanS) rawParts.push(cleanS);
+        }
       }
     }
   }
@@ -208,6 +222,7 @@ export const getRowCellValue = (row, colName) => {
 const checkSingleCell = (cellValue, prep) => {
   if (cellValue === null || cellValue === undefined || cellValue === '') return false;
   const rawCell = String(cellValue).toLowerCase().trim();
+  const cleanCell = rawCell.replace(/[{}"\[\]\(\)\-\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Strict file matching for source file filters
   if (prep.column === 'source_file') {
@@ -223,10 +238,10 @@ const checkSingleCell = (cellValue, prep) => {
 
     const qClean = prep.queryTransClean;
     const qSkel = prep.querySkelClean;
-    const cellClean = cleanParty(rawCell);
+    const cellClean = cleanParty(cleanCell || rawCell);
 
     // 1. Direct whole cell equality
-    if (cellClean === qClean) return true;
+    if (cellClean === qClean || cleanParty(rawCell) === qClean) return true;
     if (Math.abs(cellClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(cellClean) === qSkel) return true;
 
     // 2. Individual party equality (for multi-person cells e.g. "1) Person A 2) Person B")
@@ -235,7 +250,7 @@ const checkSingleCell = (cellValue, prep) => {
       for (let i = 0; i < parties.length; i++) {
         const p = parties[i].trim();
         if (!p) continue;
-        const pClean = cleanParty(p);
+        const pClean = cleanParty(p.replace(/[{}"\[\]\(\)\-\-]/g, ' '));
         if (pClean === qClean) return true;
         if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
       }
@@ -245,28 +260,31 @@ const checkSingleCell = (cellValue, prep) => {
   }
 
   // Tier 0: Direct Raw Match (Instant substring check)
-  if (rawCell.includes(prep.rawQuery)) return true;
+  if (rawCell.includes(prep.rawQuery) || cleanCell.includes(prep.rawQuery) || (prep.cleanQuery && cleanCell.includes(prep.cleanQuery))) return true;
 
   // Tier 0.5: Legal Deed & Term Synonym Match (assignment ⇄ असाईनमेंट, agreement ⇄ करारनामा / ॲग्रीमेंट, etc.)
   if (prep.synonyms && prep.synonyms.length > 0) {
     for (let i = 0; i < prep.synonyms.length; i++) {
-      if (rawCell.includes(prep.synonyms[i])) return true;
+      const syn = prep.synonyms[i];
+      if (rawCell.includes(syn) || cleanCell.includes(syn)) return true;
     }
   }
 
   const cellTrans = transliterate(rawCell);
+  const cellTransClean = transliterate(cleanCell);
 
   // Tier 1: Fast Transliterated Substring Match
-  if (cellTrans.includes(prep.queryTrans)) return true;
+  if (cellTrans.includes(prep.queryTrans) || cellTransClean.includes(prep.queryTrans) || (prep.cleanQueryTrans && cellTransClean.includes(prep.cleanQueryTrans))) return true;
 
   const cellSkel = getSkeleton(cellTrans);
+  const cellSkelClean = getSkeleton(cellTransClean);
 
   // Tier 2: Fast Phonetic Skeleton Match
-  if (prep.querySkel.length > 1 && cellSkel.includes(prep.querySkel)) return true;
+  if (prep.querySkel.length > 1 && (cellSkel.includes(prep.querySkel) || cellSkelClean.includes(prep.querySkel))) return true;
 
   // Tier 3: Multi-Word Matcher (Typos & partial words)
   if (prep.queryWordMeta.length > 0) {
-    const cellWords = cellTrans.split(/\s+/).filter(w => w.length > 0);
+    const cellWords = (cellTransClean || cellTrans).split(/\s+/).filter(w => w.length > 0);
     let matchedWordsCount = 0;
 
     for (let qMeta of prep.queryWordMeta) {
@@ -364,12 +382,30 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
       len: w.length
     }));
 
-    const cleanQuery = rawQuery.replace(/[\s_\-]+/g, '');
-    const synonyms = deedSynonyms[rawQuery] || deedSynonyms[cleanQuery] || [];
+    const cleanQuery = rawQuery.replace(/[{}"\[\]\(\)\-\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const cleanQueryTrans = transliterate(cleanQuery);
+    const compactQuery = rawQuery.replace(/[\s_\-]+/g, '');
+    const synSet = new Set([
+      ...(deedSynonyms[rawQuery] || []),
+      ...(deedSynonyms[cleanQuery] || []),
+      ...(deedSynonyms[compactQuery] || [])
+    ]);
+    const qWordList = cleanQuery.split(/\s+/);
+    for (let i = 0; i < qWordList.length; i++) {
+      const w = qWordList[i];
+      if (deedSynonyms[w]) {
+        for (let j = 0; j < deedSynonyms[w].length; j++) {
+          synSet.add(deedSynonyms[w][j]);
+        }
+      }
+    }
+    const synonyms = Array.from(synSet);
 
     return {
       column: c.column,
       rawQuery,
+      cleanQuery,
+      cleanQueryTrans,
       queryTrans,
       queryTransClean,
       querySkel,
@@ -415,7 +451,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
 
         const blob = getRowSearchBlob(row);
         // Tier 0: Direct Raw Substring in whole row blob
-        if (blob.rawBlob.includes(prep.rawQuery)) return true;
+        if (blob.rawBlob.includes(prep.rawQuery) || (prep.cleanQuery && blob.rawBlob.includes(prep.cleanQuery))) return true;
         // Tier 0.5: Legal Deed & Term Synonym Match in global search
         if (prep.synonyms && prep.synonyms.length > 0) {
           for (let i = 0; i < prep.synonyms.length; i++) {
@@ -423,7 +459,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
           }
         }
         // Tier 1: Transliterated Substring in whole row blob
-        if (blob.transBlob.includes(prep.queryTrans)) return true;
+        if (blob.transBlob.includes(prep.queryTrans) || (prep.cleanQueryTrans && blob.transBlob.includes(prep.cleanQueryTrans))) return true;
         // Tier 2: Phonetic Skeleton in whole row blob
         if (prep.querySkel.length > 1 && blob.skelBlob.includes(prep.querySkel)) return true;
 
