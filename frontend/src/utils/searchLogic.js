@@ -222,31 +222,44 @@ export const getRowCellValue = (row, colName) => {
   return '';
 };
 
-const checkSingleCell = (cellValue, prep) => {
-  if (cellValue === null || cellValue === undefined || cellValue === '') return false;
+export const matchSingleCell = (cellValue, prep) => {
+  if (cellValue === null || cellValue === undefined || cellValue === '') {
+    return { matched: false, tier: null, score: 0, reason: '' };
+  }
   const rawCell = String(cellValue).toLowerCase().trim();
   const cleanCell = rawCell.replace(/[{}"\[\]\(\)\-\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Strict file matching for source file filters
   if (prep.column === 'source_file') {
-    return rawCell === prep.rawQuery || rawCell.includes(prep.rawQuery);
+    if (rawCell === prep.rawQuery) return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact file' };
+    if (rawCell.includes(prep.rawQuery)) return { matched: true, tier: 'EXACT', score: 95, reason: 'File match' };
+    return { matched: false, tier: null, score: 0, reason: '' };
   }
 
   // If Exact Match is requested (either prep.isExact is true or query had quotes)
   if (prep.isExact) {
     // Fast path: direct raw equality or inclusion of raw query
-    if (rawCell === prep.rawQuery || rawCell.includes(prep.rawQuery) || cleanCell === prep.cleanQuery || cleanCell.includes(prep.cleanQuery)) return true;
+    if (rawCell === prep.rawQuery || cleanCell === prep.cleanQuery) {
+      return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact match' };
+    }
+    if (rawCell.includes(prep.rawQuery) || cleanCell.includes(prep.cleanQuery)) {
+      return { matched: true, tier: 'EXACT', score: 95, reason: 'Exact match' };
+    }
 
     // If checking dates (e.g. year "2024" matching "15/04/2024")
     if (prep.column === 'registrationdate' || /^\d{4}$/.test(prep.rawQuery)) {
-      if (rawCell.includes(prep.rawQuery)) return true;
+      if (rawCell.includes(prep.rawQuery)) {
+        return { matched: true, tier: 'EXACT', score: 100, reason: 'Date / ID match' };
+      }
     }
 
     // Deed synonym check in exact mode
     if (prep.synonyms && prep.synonyms.length > 0) {
       for (let i = 0; i < prep.synonyms.length; i++) {
         const syn = prep.synonyms[i];
-        if (rawCell.includes(syn) || cleanCell.includes(syn)) return true;
+        if (rawCell.includes(syn) || cleanCell.includes(syn)) {
+          return { matched: true, tier: 'PHONETIC', score: 85, reason: `Legal deed: ${syn}` };
+        }
       }
     }
 
@@ -255,8 +268,12 @@ const checkSingleCell = (cellValue, prep) => {
     const cellClean = cleanParty(cleanCell || rawCell);
 
     // 1. Direct whole cell equality
-    if (cellClean === qClean || cleanParty(rawCell) === qClean) return true;
-    if (Math.abs(cellClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(cellClean) === qSkel) return true;
+    if (cellClean === qClean || cleanParty(rawCell) === qClean) {
+      return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact party name' };
+    }
+    if (Math.abs(cellClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(cellClean) === qSkel) {
+      return { matched: true, tier: 'PHONETIC', score: 90, reason: 'Exact phonetic name' };
+    }
 
     // 2. Individual party equality and word-level party match
     const parties = (rawCell.includes(')') || rawCell.includes(',') || rawCell.includes('\n') || rawCell.includes(';'))
@@ -267,33 +284,47 @@ const checkSingleCell = (cellValue, prep) => {
       const p = parties[i].trim();
       if (!p) continue;
       const pClean = cleanParty(p.replace(/[{}"\[\]\(\)\-\-]/g, ' '));
-      if (pClean === qClean) return true;
-      if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) return true;
+      if (pClean === qClean) {
+        return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact party member' };
+      }
+      if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) {
+        return { matched: true, tier: 'PHONETIC', score: 90, reason: 'Phonetic party member' };
+      }
 
       // Word-level strict matching within party only if query is a single word (e.g. searching "ashwini" matches "ashwini sandip lokhande")
-      // If user typed full multi-word name (e.g. "Dnyaneshwar Patil"), in exact mode it must match the exact person (not someone with a middle name)
       if (prep.queryWordMeta && prep.queryWordMeta.length === 1) {
         const pWords = pClean.split(/\s+/).filter(Boolean);
         const qMeta = prep.queryWordMeta[0];
         for (const pw of pWords) {
-          if (pw === qMeta.word || (qMeta.len >= 3 && pw.startsWith(qMeta.word))) return true;
+          if (pw === qMeta.word || (qMeta.len >= 3 && pw.startsWith(qMeta.word))) {
+            return { matched: true, tier: 'EXACT', score: 95, reason: 'Party name token' };
+          }
           const pwSkel = getSkeleton(pw);
-          if (pwSkel === qMeta.skel || (qMeta.skel.length >= 4 && pwSkel.startsWith(qMeta.skel))) return true;
+          if (pwSkel === qMeta.skel || (qMeta.skel.length >= 4 && pwSkel.startsWith(qMeta.skel))) {
+            return { matched: true, tier: 'PHONETIC', score: 85, reason: 'Phonetic name token' };
+          }
         }
       }
     }
 
-    return false;
+    return { matched: false, tier: null, score: 0, reason: '' };
   }
 
   // Tier 0: Direct Raw Match (Instant substring check)
-  if (rawCell.includes(prep.rawQuery) || cleanCell.includes(prep.rawQuery) || (prep.cleanQuery && cleanCell.includes(prep.cleanQuery))) return true;
+  if (rawCell === prep.rawQuery || cleanCell === prep.cleanQuery) {
+    return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact text match' };
+  }
+  if (rawCell.includes(prep.rawQuery) || cleanCell.includes(prep.rawQuery) || (prep.cleanQuery && cleanCell.includes(prep.cleanQuery))) {
+    return { matched: true, tier: 'EXACT', score: 95, reason: 'Exact text match' };
+  }
 
   // Tier 0.5: Legal Deed & Term Synonym Match (assignment ⇄ असाईनमेंट, agreement ⇄ करारनामा / ॲग्रीमेंट, etc.)
   if (prep.synonyms && prep.synonyms.length > 0) {
     for (let i = 0; i < prep.synonyms.length; i++) {
       const syn = prep.synonyms[i];
-      if (rawCell.includes(syn) || cleanCell.includes(syn)) return true;
+      if (rawCell.includes(syn) || cleanCell.includes(syn)) {
+        return { matched: true, tier: 'PHONETIC', score: 85, reason: `Legal deed match: ${syn}` };
+      }
     }
   }
 
@@ -301,12 +332,16 @@ const checkSingleCell = (cellValue, prep) => {
   const cellTransClean = transliterate(cleanCell);
 
   // Tier 1: Fast Transliterated Substring Match
-  if (cellTrans.includes(prep.queryTrans) || cellTransClean.includes(prep.queryTrans) || (prep.cleanQueryTrans && cellTransClean.includes(prep.cleanQueryTrans))) return true;
+  if (cellTrans.includes(prep.queryTrans) || cellTransClean.includes(prep.queryTrans) || (prep.cleanQueryTrans && cellTransClean.includes(prep.cleanQueryTrans))) {
+    return { matched: true, tier: 'PHONETIC', score: 80, reason: 'Transliterated match' };
+  }
 
   // Tier 2: Multi-Word Matcher (Typos & partial words with strict word-level skeleton matching)
   if (prep.queryWordMeta.length > 0) {
     const cellWords = (cellTransClean || cellTrans).split(/\s+/).filter(w => w.length > 0);
     let matchedWordsCount = 0;
+    let hasTypo = false;
+    let allExactWords = true;
 
     for (let qMeta of prep.queryWordMeta) {
       let wordMatched = false;
@@ -319,9 +354,9 @@ const checkSingleCell = (cellValue, prep) => {
 
         const cSkel = getSkeleton(cWord);
         // STRICT WORD-LEVEL SKELETON MATCH: Exact skeleton equality or prefix (if query >= 4)
-        // Prevents short query skeleton like 'svn' (ashwini) from substring matching inside 'ysvnt' (yashvant) or 'ksvn' (kesavan)
         if (cSkel === qMeta.skel || (qMeta.skel.length >= 4 && cSkel.startsWith(qMeta.skel))) {
           wordMatched = true;
+          allExactWords = false;
           break;
         }
 
@@ -329,6 +364,8 @@ const checkSingleCell = (cellValue, prep) => {
         if (!/\d/.test(qMeta.word) && qMeta.len >= 4 && qMeta.len <= 15 && cWord.length >= 4 && cWord.length <= 15) {
           if (levenshtein(qMeta.word, cWord) <= 1) {
             wordMatched = true;
+            hasTypo = true;
+            allExactWords = false;
             break;
           }
         }
@@ -337,10 +374,22 @@ const checkSingleCell = (cellValue, prep) => {
       if (wordMatched) matchedWordsCount++;
     }
 
-    if (matchedWordsCount === prep.queryWordMeta.length) return true;
+    if (matchedWordsCount === prep.queryWordMeta.length) {
+      if (allExactWords) {
+        return { matched: true, tier: 'EXACT', score: 92, reason: 'Multi-word exact match' };
+      } else if (hasTypo) {
+        return { matched: true, tier: 'PARTY', score: 70, reason: 'Typo-tolerant match' };
+      } else {
+        return { matched: true, tier: 'PHONETIC', score: 80, reason: 'Phonetic match' };
+      }
+    }
   }
 
-  return false;
+  return { matched: false, tier: null, score: 0, reason: '' };
+};
+
+export const checkSingleCell = (cellValue, prep) => {
+  return matchSingleCell(cellValue, prep).matched;
 };
 
 // Pre-warm search cache for all rows in non-blocking batches (scales to 50,000+ rows)
@@ -442,14 +491,19 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
     };
   });
 
-  return masterData.filter(row => {
+  const matchedRows = [];
+
+  for (let r = 0; r < masterData.length; r++) {
+    const row = masterData[r];
+    const criteriaResults = [];
+
     const checkCriteria = (prep) => {
       // Handle numeric range filters (Price, Carpet Area)
       if (prep.isRange) {
         const val = Number(getRowCellValue(row, prep.column) || 0);
-        if (prep.min !== null && !isNaN(prep.min) && val < prep.min) return false;
-        if (prep.max !== null && !isNaN(prep.max) && val > prep.max) return false;
-        return true;
+        if (prep.min !== null && !isNaN(prep.min) && val < prep.min) return null;
+        if (prep.max !== null && !isNaN(prep.max) && val > prep.max) return null;
+        return { matched: true, tier: 'EXACT', score: 100, column: prep.column, reason: 'Range matched' };
       }
 
       if (prep.isGlobal) {
@@ -468,7 +522,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
                   break;
                 }
               }
-              if (!allWordsPresent) return false;
+              if (!allWordsPresent) return null;
             }
 
             const firstSkel = prep.queryWordMeta[0]?.skel;
@@ -483,7 +537,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
               }
             }
             if (!foundSkel) {
-              return false;
+              return null;
             }
           }
 
@@ -491,26 +545,37 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
           for (let i = 0; i < keys.length; i++) {
             const col = keys[i];
             if (col.startsWith('_')) continue;
-            if (row[col] && checkSingleCell(row[col], prep)) return true;
+            if (row[col]) {
+              const res = matchSingleCell(row[col], prep);
+              if (res.matched) return { ...res, column: col };
+            }
           }
-          return false;
+          return null;
         }
 
         const blob = getRowSearchBlob(row);
         // Tier 0: Direct Raw Substring in whole row blob
-        if (blob.rawBlob.includes(prep.rawQuery) || (prep.cleanQuery && blob.rawBlob.includes(prep.cleanQuery))) return true;
+        if (blob.rawBlob.includes(prep.rawQuery) || (prep.cleanQuery && blob.rawBlob.includes(prep.cleanQuery))) {
+          return { matched: true, tier: 'EXACT', score: 95, column: 'ALL', reason: 'Exact text in row' };
+        }
         // Tier 0.5: Legal Deed & Term Synonym Match in global search
         if (prep.synonyms && prep.synonyms.length > 0) {
           for (let i = 0; i < prep.synonyms.length; i++) {
-            if (blob.rawBlob.includes(prep.synonyms[i])) return true;
+            if (blob.rawBlob.includes(prep.synonyms[i])) {
+              return { matched: true, tier: 'PHONETIC', score: 85, column: 'ALL', reason: `Legal deed: ${prep.synonyms[i]}` };
+            }
           }
         }
         // Tier 1: Transliterated Substring in whole row blob
-        if (blob.transBlob.includes(prep.queryTrans) || (prep.cleanQueryTrans && blob.transBlob.includes(prep.cleanQueryTrans))) return true;
+        if (blob.transBlob.includes(prep.queryTrans) || (prep.cleanQueryTrans && blob.transBlob.includes(prep.cleanQueryTrans))) {
+          return { matched: true, tier: 'PHONETIC', score: 80, column: 'ALL', reason: 'Transliterated match in row' };
+        }
 
         // Tier 2: Multi-word query with strict word-level skeleton matching (all words must match)
         if (prep.queryWordMeta.length > 0) {
           let allWordsMatched = true;
+          let allExact = true;
+          let hasTypo = false;
           for (let qMeta of prep.queryWordMeta) {
             if (blob.transBlob.includes(qMeta.word)) continue;
 
@@ -521,6 +586,7 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
                 const wSkel = blob.wordSkels[i];
                 if (wSkel === qMeta.skel || (qMeta.skel.length >= 4 && wSkel.startsWith(qMeta.skel))) {
                   wordSkelMatched = true;
+                  allExact = false;
                   break;
                 }
               }
@@ -534,6 +600,8 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
                 const w = blob.words[i];
                 if (!/\d/.test(w) && Math.abs(w.length - qMeta.len) <= 1 && levenshtein(qMeta.word, w) <= 1) {
                   fuzzyMatched = true;
+                  hasTypo = true;
+                  allExact = false;
                   break;
                 }
               }
@@ -543,19 +611,61 @@ export const executeSmartSearch = (masterData, criteriaList, matchMode = 'AND', 
               break;
             }
           }
-          if (allWordsMatched) return true;
+          if (allWordsMatched) {
+            if (allExact) return { matched: true, tier: 'EXACT', score: 90, column: 'ALL', reason: 'All words matched in row' };
+            if (hasTypo) return { matched: true, tier: 'PARTY', score: 70, column: 'ALL', reason: 'Typo-tolerant match' };
+            return { matched: true, tier: 'PHONETIC', score: 80, column: 'ALL', reason: 'Phonetic match in row' };
+          }
         }
 
-        return false;
+        return null;
       }
 
-      return checkSingleCell(getRowCellValue(row, prep.column), prep);
+      const res = matchSingleCell(getRowCellValue(row, prep.column), prep);
+      return res.matched ? { ...res, column: prep.column } : null;
     };
 
+    let rowMatched = false;
     if (matchMode === 'AND') {
-      return preparedCriteria.every(checkCriteria);
-    } else {
-      return preparedCriteria.some(checkCriteria);
+      let allPassed = true;
+      for (let i = 0; i < preparedCriteria.length; i++) {
+        const cRes = checkCriteria(preparedCriteria[i]);
+        if (!cRes) {
+          allPassed = false;
+          break;
+        }
+        criteriaResults.push(cRes);
+      }
+      rowMatched = allPassed;
+    } else { // OR
+      for (let i = 0; i < preparedCriteria.length; i++) {
+        const cRes = checkCriteria(preparedCriteria[i]);
+        if (cRes) {
+          rowMatched = true;
+          criteriaResults.push(cRes);
+        }
+      }
     }
-  });
+
+    if (rowMatched && criteriaResults.length > 0) {
+      const avgScore = Math.round(
+        criteriaResults.reduce((sum, c) => sum + (c.score || 80), 0) / criteriaResults.length
+      );
+      const tiers = criteriaResults.map(c => c.tier);
+      let finalTier = 'EXACT';
+      if (tiers.includes('PARTY')) finalTier = 'PARTY';
+      else if (tiers.includes('PHONETIC')) finalTier = 'PHONETIC';
+
+      row._matchScore = avgScore;
+      row._matchTier = finalTier;
+      row._matchReason = criteriaResults.map(c => c.reason).filter(Boolean).join('; ');
+      row._matchedColumns = Array.from(new Set(criteriaResults.map(c => c.column).filter(Boolean)));
+
+      matchedRows.push(row);
+    }
+  }
+
+  // Priority Ranking: 100% Exact matches first (score descending)
+  matchedRows.sort((a, b) => (b._matchScore || 0) - (a._matchScore || 0));
+  return matchedRows;
 };

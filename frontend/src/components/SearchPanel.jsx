@@ -42,6 +42,7 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
 
   const [pendingResults, setPendingResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [tierFilter, setTierFilter] = useState('ALL');
   const debounceTimerRef = useRef(null);
 
   // Dynamic lists from dataset for side-by-side dropdowns
@@ -172,6 +173,7 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
     setCarpetRange('');
     setSelectedSourceFile('');
     setIsExactMatch(false);
+    setTierFilter('ALL');
     setAdvancedConditions([{ column: 'ALL', query: '' }]);
     setPendingResults(null);
   };
@@ -183,6 +185,24 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
 
   const hasAnyFilter = keyword || selectedSociety || selectedYear || selectedDeedType || flatNumber || priceRange || carpetRange ||
     (showAdvanced && advancedConditions.some(c => c.query.trim() !== ''));
+
+  const matchStats = useMemo(() => {
+    if (!pendingResults) return { total: 0, exact: 0, phonetic: 0, party: 0 };
+    let exact = 0, phonetic = 0, party = 0;
+    for (let i = 0; i < pendingResults.length; i++) {
+      const t = pendingResults[i]._matchTier;
+      if (t === 'EXACT') exact++;
+      else if (t === 'PHONETIC') phonetic++;
+      else party++;
+    }
+    return { total: pendingResults.length, exact, phonetic, party };
+  }, [pendingResults]);
+
+  const displayedResults = useMemo(() => {
+    if (!pendingResults) return [];
+    if (tierFilter === 'ALL') return pendingResults;
+    return pendingResults.filter(r => r._matchTier === tierFilter);
+  }, [pendingResults, tierFilter]);
 
   return (
     <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -675,7 +695,7 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
             <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span>🎯 Results:</span>
               <strong style={{ color: pendingResults.length > 0 ? '#3b82f6' : '#f59e0b' }}>
-                {pendingResults.length} Matching Deeds Found
+                {displayedResults.length} Matching Deeds Found
               </strong>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>
                 (filtered from {masterData?.length || 0} total)
@@ -689,13 +709,105 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
                   onClick={() => handleDecision('INITIAL_ADD')}
                   style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
                 >
-                  ➕ Add to Workspace ({pendingResults.length})
+                  ➕ Add to Workspace ({displayedResults.length})
                 </button>
               </div>
             )}
           </div>
 
-          <DataTable data={pendingResults} />
+          {/* Tiered Match Precision Filter Pills */}
+          {matchStats.total > 0 && (matchStats.exact > 0 || matchStats.phonetic > 0) && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              flexWrap: 'wrap',
+              marginBottom: '0.85rem',
+              background: 'var(--bg-main)',
+              padding: '0.45rem 0.75rem',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)'
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Match Precision:
+              </span>
+              <button
+                type="button"
+                onClick={() => setTierFilter('ALL')}
+                style={{
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '9999px',
+                  border: '1px solid ' + (tierFilter === 'ALL' ? '#3b82f6' : 'var(--border-color)'),
+                  background: tierFilter === 'ALL' ? '#3b82f6' : 'var(--bg-card)',
+                  color: tierFilter === 'ALL' ? '#fff' : 'var(--text-main)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                All Matches ({matchStats.total})
+              </button>
+              {matchStats.exact > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTierFilter('EXACT')}
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '9999px',
+                    border: '1px solid ' + (tierFilter === 'EXACT' ? '#16a34a' : 'var(--border-color)'),
+                    background: tierFilter === 'EXACT' ? '#16a34a' : 'var(--bg-card)',
+                    color: tierFilter === 'EXACT' ? '#fff' : '#15803d',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  title="Show only 100% exact matches"
+                >
+                  🎯 100% Exact ({matchStats.exact})
+                </button>
+              )}
+              {matchStats.phonetic > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTierFilter('PHONETIC')}
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '9999px',
+                    border: '1px solid ' + (tierFilter === 'PHONETIC' ? '#2563eb' : 'var(--border-color)'),
+                    background: tierFilter === 'PHONETIC' ? '#2563eb' : 'var(--bg-card)',
+                    color: tierFilter === 'PHONETIC' ? '#fff' : '#1d4ed8',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  title="Show phonetic / legal deed translation matches"
+                >
+                  🔤 Phonetic / Translation ({matchStats.phonetic})
+                </button>
+              )}
+              {matchStats.party > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTierFilter('PARTY')}
+                  style={{
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '9999px',
+                    border: '1px solid ' + (tierFilter === 'PARTY' ? '#9333ea' : 'var(--border-color)'),
+                    background: tierFilter === 'PARTY' ? '#9333ea' : 'var(--bg-card)',
+                    color: tierFilter === 'PARTY' ? '#fff' : '#7e22ce',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  title="Show party token / typo-tolerant matches"
+                >
+                  👥 Party Member ({matchStats.party})
+                </button>
+              )}
+            </div>
+          )}
+
+          <DataTable data={displayedResults} />
         </div>
       )}
 

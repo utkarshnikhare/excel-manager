@@ -58,6 +58,8 @@ const DataTable = ({ data, onDeleteRow }) => {
     return Boolean(first.docno || first.DocNo || first.society || first.consideration_amt || first.propertydescription || first.PropertyDescription);
   }, [safeData]);
 
+  const hasMatchTier = useMemo(() => safeData.some(r => Boolean(r._matchTier)), [safeData]);
+
   const visibleColumns = useMemo(() => {
     return allColumns.filter(c => !hiddenCols.has(c.toLowerCase()));
   }, [allColumns, hiddenCols]);
@@ -449,6 +451,19 @@ const DataTable = ({ data, onDeleteRow }) => {
                             <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#3b82f6', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
                               Doc #{row.docno || 'N/A'}
                             </span>
+                            {row._matchTier && (
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                background: row._matchTier === 'EXACT' ? 'rgba(34, 197, 94, 0.15)' : (row._matchTier === 'PHONETIC' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(168, 85, 247, 0.15)'),
+                                color: row._matchTier === 'EXACT' ? '#15803d' : (row._matchTier === 'PHONETIC' ? '#1d4ed8' : '#7e22ce'),
+                                border: `1px solid ${row._matchTier === 'EXACT' ? 'rgba(34, 197, 94, 0.4)' : (row._matchTier === 'PHONETIC' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(168, 85, 247, 0.4)')}`,
+                                padding: '0.12rem 0.45rem',
+                                borderRadius: '9999px'
+                              }} title={row._matchReason}>
+                                {row._matchTier === 'EXACT' ? '🎯 100% Exact' : (row._matchTier === 'PHONETIC' ? '🔤 Phonetic Match' : '👥 Party Match')}
+                              </span>
+                            )}
                             {row.source_file && (
                               <span style={{
                                 fontSize: '0.68rem',
@@ -543,6 +558,19 @@ const DataTable = ({ data, onDeleteRow }) => {
                             <span style={{ fontSize: '0.7rem', fontWeight: 800, background: '#3b82f6', color: '#fff', padding: '0.15rem 0.45rem', borderRadius: '4px' }}>
                               #{rowsPerPage === 'All' ? idx + 1 : (activePage - 1) * rowsPerPage + idx + 1}
                             </span>
+                            {row._matchTier && (
+                              <span style={{
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                background: row._matchTier === 'EXACT' ? 'rgba(34, 197, 94, 0.15)' : (row._matchTier === 'PHONETIC' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(168, 85, 247, 0.15)'),
+                                color: row._matchTier === 'EXACT' ? '#15803d' : (row._matchTier === 'PHONETIC' ? '#1d4ed8' : '#7e22ce'),
+                                border: `1px solid ${row._matchTier === 'EXACT' ? 'rgba(34, 197, 94, 0.4)' : (row._matchTier === 'PHONETIC' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(168, 85, 247, 0.4)')}`,
+                                padding: '0.12rem 0.45rem',
+                                borderRadius: '9999px'
+                              }} title={row._matchReason}>
+                                {row._matchTier === 'EXACT' ? '🎯 100% Exact' : (row._matchTier === 'PHONETIC' ? '🔤 Phonetic Match' : '👥 Party Match')}
+                              </span>
+                            )}
                             {row.source_file && (
                               <span style={{
                                 fontSize: '0.68rem',
@@ -625,6 +653,11 @@ const DataTable = ({ data, onDeleteRow }) => {
               <tr>
                 <th style={{ padding: '0.6rem 0.8rem', width: '45px', textAlign: 'center' }}>#</th>
                 <th style={{ padding: '0.6rem 0.8rem', width: '90px', textAlign: 'center' }}>Details</th>
+                {hasMatchTier && (
+                  <th style={{ padding: '0.6rem 0.8rem', width: '135px', textAlign: 'center', fontSize: '0.85rem', fontWeight: '600' }}>
+                    Match Precision
+                  </th>
+                )}
                 {visibleColumns.map(col => (
                   <th
                     key={col}
@@ -673,6 +706,49 @@ const DataTable = ({ data, onDeleteRow }) => {
                           📄 View
                         </button>
                       </td>
+                      {hasMatchTier && (
+                        <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          {row._matchTier === 'EXACT' ? (
+                            <span style={{
+                              background: 'rgba(34, 197, 94, 0.15)',
+                              color: '#15803d',
+                              border: '1px solid rgba(34, 197, 94, 0.4)',
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700
+                            }} title={row._matchReason || '100% Exact Match'}>
+                              🎯 Exact ({row._matchScore || 100}%)
+                            </span>
+                          ) : row._matchTier === 'PHONETIC' ? (
+                            <span style={{
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              color: '#1d4ed8',
+                              border: '1px solid rgba(59, 130, 246, 0.4)',
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700
+                            }} title={row._matchReason || 'Phonetic or Translated Match'}>
+                              🔤 Phonetic ({row._matchScore || 85}%)
+                            </span>
+                          ) : row._matchTier === 'PARTY' ? (
+                            <span style={{
+                              background: 'rgba(168, 85, 247, 0.15)',
+                              color: '#7e22ce',
+                              border: '1px solid rgba(168, 85, 247, 0.4)',
+                              padding: '0.15rem 0.5rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700
+                            }} title={row._matchReason || 'Party Token Match'}>
+                              👥 Party ({row._matchScore || 70}%)
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>
+                          )}
+                        </td>
+                      )}
                       {visibleColumns.map(col => (
                         <td key={col} style={{ padding: '0.5rem 0.9rem', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                           {renderCellContent(col, row[col], row)}
