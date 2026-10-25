@@ -149,10 +149,8 @@ function ensureSyntheticDatasets() {
         '@SUM(1,2)': '=HYPERLINK("https://attacker.example","click")',
         '+1+2': ' =cmd|"/C calc"!A0',
         '-2+3': '   =1+1',
-        '|calc.exe': '
-=1+1',
-        '%COMSPEC%': '
-=cmd|...',
+        '|calc.exe': '\n=1+1',
+        '%COMSPEC%': '\r\n=cmd|...',
         'NegInt': -500,
         'NegFloat': -12.34,
         'NegString': '-500',
