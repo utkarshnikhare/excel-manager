@@ -22,7 +22,12 @@ const labialConsonants = new Set(['प', 'फ', 'ब', 'भ', 'म', 'p', 'b', '
 
 export const normalizeUnicode = (text) => {
   if (!text) return "";
-  return String(text).normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  return String(text)
+    .normalize('NFC')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\u0964\u0965]/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
 };
 
 export const transliterate = (text) => {
@@ -72,7 +77,7 @@ export const getSkeleton = (text) => {
     .replace(/\s+/g, ' ')
     .trim();
 
-  return normalized.replace(/([a-z0-9])\1+/g, '$1'); 
+  return normalized.replace(/([a-z])\1+/g, '$1'); 
 };
 
 // Comprehensive Bidirectional Legal Deed & Term Translation Dictionary (English ⇄ Marathi/Devanagari)
@@ -266,6 +271,14 @@ export const matchSingleCell = (cellValue, prep) => {
   const rawCell = String(cellValue).toLowerCase().trim();
   const cleanCell = rawCell.replace(/[{}"\[\]\(\)\-\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
+  // Safeguard: Query consisting solely of punctuation (e.g. '???', '---', '***')
+  if (/^[^\p{L}\p{N}]+$/u.test(prep.rawQuery)) {
+    if (rawCell === prep.rawQuery) {
+      return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact punctuation match' };
+    }
+    return { matched: false, tier: null, score: 0, reason: '' };
+  }
+
   // Strict file matching for source file filters
   if (prep.column === 'source_file') {
     if (rawCell === prep.rawQuery) return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact file' };
@@ -395,12 +408,14 @@ export const matchSingleCell = (cellValue, prep) => {
           break;
         }
 
-        const cSkel = getSkeleton(cWord);
-        // STRICT WORD-LEVEL SKELETON MATCH: Exact skeleton equality or prefix (if query >= 4)
-        if (cSkel === qMeta.skel || (qMeta.skel.length >= 4 && cSkel.startsWith(qMeta.skel))) {
-          wordMatched = true;
-          allExactWords = false;
-          break;
+        // STRICT WORD-LEVEL SKELETON MATCH: Only for alphabetic words (never numeric identifiers)
+        if (!/\d/.test(qMeta.word) && !/\d/.test(cWord)) {
+          const cSkel = getSkeleton(cWord);
+          if (cSkel === qMeta.skel || (qMeta.skel.length >= 4 && cSkel.startsWith(qMeta.skel))) {
+            wordMatched = true;
+            allExactWords = false;
+            break;
+          }
         }
 
         // Levenshtein typo check only for alphabetic words of 4-15 chars (never numeric identifiers)

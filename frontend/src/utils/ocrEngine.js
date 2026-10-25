@@ -141,9 +141,14 @@ export async function ocrScannedPdf(pdfDoc, fileName, onProgress) {
       const parsedRecords = parseIgrIndex2Text(combinedOcrText, fileName);
       return parsedRecords.map(rec => ({
         ...rec,
+        _extractionSource: 'LOCAL_WASM_OCR',
         _ocrStatus: 'OCR_SUCCESS',
         _ocrEngine: 'Tesseract.js (mar+eng Offline WASM)',
         _ocrConfidence: avgConfidence,
+        _ocrCertainty: avgConfidence >= 80 ? 'HIGH' : avgConfidence >= 55 ? 'MEDIUM' : 'UNCERTAIN',
+        _isLowConfidenceOcr: avgConfidence < 60,
+        _ocrAdvisory: avgConfidence < 60 ? 'Advisory: Low OCR confidence. Please verify against physical registered deed.' : null,
+        _rawText: combinedOcrText.trim(),
         _ocrTextSnippet: combinedOcrText.slice(0, 300)
       }));
     }

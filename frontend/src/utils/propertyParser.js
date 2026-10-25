@@ -90,7 +90,7 @@ export function extractFlatNo(desc) {
   if (!desc) return '';
   const str = normalizeDevanagariDigits(String(desc));
   // Matches flats, apartments, shops, offices, commercial units, and plots
-  const match = str.match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|ऑफीस|ऑफिस|दुकान|office|flat|shop|unit|plot|bungalow|row\s*house)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?)?\s*([A-Za-z0-9\-\/]+)/i);
+  const match = str.match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|ऑफीस|ऑफिस|दुकान|office|flat|shop|unit|plot|bungalow|row\s*house)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?|क्रमांक|नंबर)?\s*([A-Za-z0-9\-\/]+)/i);
   return match ? match[1] : '';
 }
 

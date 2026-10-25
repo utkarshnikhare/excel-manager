@@ -1,56 +1,76 @@
-import { enrichRow } from './propertyParser.js';
+import { enrichRow, normalizeDevanagariDigits } from './propertyParser.js';
 
 // Extract Maharashtra IGR Index-II deed fields from raw text
 export function parseIgrIndex2Text(fullText, fileName) {
   const records = [];
 
   // Split by deed header markers if multiple deeds exist in the text (supports "दस्तऐवज क्र.", "द. क्र.", "दस्तऐवज क्रमांक", "Doc No.")
-  const deedBlocks = fullText.split(/(?=(?:दस्तऐवज\s*(?:क्र\.|क्रमांक|नं\.?)|द\.\s*क्र\.|Doc(?:ument)?\s*No\.?)\s*[:\-])/i).filter(b => b.trim().length > 30);
+  const rawBlocks = fullText.split(/(?=(?:[०-९\d]+\.\s*)?(?:दस्तऐवज\s*(?:क्र\.|क्रमांक|नं\.?)|द\.\s*क्र\.|Doc(?:ument)?\s*No\.?)\s*[:\-])/i).filter(b => b.trim().length > 30);
+  // Filter out any preamble block before the first deed that does not contain a deed identifier
+  const deedBlocks = rawBlocks.filter(b => /(?:दस्तऐवज|द\.\s*क्र|Doc(?:ument)?\s*No)/i.test(b));
   const blocksToProcess = deedBlocks.length > 0 ? deedBlocks : [fullText];
 
   for (let bIdx = 0; bIdx < blocksToProcess.length; bIdx++) {
     const block = blocksToProcess[bIdx];
 
-    // Match document number: e.g. "दस्तऐवज क्र. : 16060 / 2024" or "Doc No: 16060"
-    const docNoMatch = block.match(/(?:दस्तऐवज\s*(?:क्र\.|क्रमांक|नं\.?)|द\.\s*क्र\.|Doc(?:ument)?\s*No\.?)\s*[:\-]?\s*(\d+)/i);
-    const docNo = docNoMatch ? docNoMatch[1] : '';
+    // Match document number: e.g. "दस्तऐवज क्र. : 16060 / 2024", Devanagari "१६०६० / २०२४", or "Doc No: 16060"
+    const docNoMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:दस्तऐवज\s*(?:क्र\.|क्रमांक|नं\.?)|द\.\s*क्र\.|Doc(?:ument)?\s*No\.?)\s*[:\-]?\s*([०-९\d]+)/i);
+    const docNo = docNoMatch ? normalizeDevanagariDigits(docNoMatch[1]).replace(/\s+/g, '') : '';
 
-    // Match registration date: e.g. "नोंदणी दिनांक : 15/04/2024" or "Date: 15/04/2024"
-    const dateMatch = block.match(/(?:नोंदणी\s*दिनांक|Reg(?:istration)?\s*Date)\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i) ||
-                      block.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/);
-    const regDate = dateMatch ? dateMatch[1] : '';
+    // Match registration date: e.g. "नोंदणी दिनांक : 15/04/2024" or Devanagari "१५/०४/२०२४"
+    const dateMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:नोंदणी\s*दिनांक|Reg(?:istration)?\s*Date)\s*[:\-]?\s*([०-९\d]{1,2}[\/\-][०-९\d]{1,2}[\/\-][०-९\d]{4})/i) ||
+                      block.match(/([०-९\d]{1,2}[\/\-][०-९\d]{1,2}[\/\-][०-९\d]{4})/);
+    const regDate = dateMatch ? normalizeDevanagariDigits(dateMatch[1]) : '';
 
     // Match document name: e.g. "खरेदीखत" or "Agreement to Sale"
-    const docNameMatch = block.match(/(?:दस्तऐवजाचा\s*प्रकार|Deed\s*Type|Document\s*Type)\s*[:\-]?\s*([^\n\r]+)/i);
+    const docNameMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:दस्तऐवजाचा\s*प्रकार|Deed\s*Type|Document\s*Type)\s*[:\-]?\s*([^\n\r]+)/i);
     const docName = docNameMatch ? docNameMatch[1].trim() : (block.includes('खरेदीखत') ? 'खरेदीखत (Sale Deed)' : (block.includes('गहाणखत') ? 'गहाणखत (Mortgage)' : 'Index-II Deed'));
 
     // Match SRO office: e.g. "हवेली क्र. ३" or "Haveli No. 3"
-    const sroMatch = block.match(/(?:दुय्यम\s*निबंधक|SRO)\s*[:\-]?\s*([^\n\r]+)/i);
+    const sroMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:दुय्यम\s*निबंधक|Sub-Registrar|SRO)\s*[:\-]?\s*([^\n\r]+)/i);
     const sroName = sroMatch ? sroMatch[1].trim() : 'हवेली (Haveli)';
 
-    // Financial amounts: Consideration & Market Value
-    const consMatch = block.match(/(?:मोबदला|Consideration(?:\s*Amount)?)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const consAmt = consMatch ? parseFloat(consMatch[1].replace(/,/g, '')) : 0;
+    // Financial amounts: Consideration & Market Value (supporting both English and Devanagari numerals)
+    const consMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:मोबदला|Consideration(?:\s*Amount)?)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([०-९\d,]+)/i);
+    const consAmt = consMatch ? parseFloat(normalizeDevanagariDigits(consMatch[1]).replace(/,/g, '')) : 0;
 
-    const mktMatch = block.match(/(?:बाजारभाव|Market\s*Value)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const mktVal = mktMatch ? parseFloat(mktMatch[1].replace(/,/g, '')) : 0;
+    const mktMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:बाजारभाव|Market\s*Value)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([०-९\d,]+)/i);
+    const mktVal = mktMatch ? parseFloat(normalizeDevanagariDigits(mktMatch[1]).replace(/,/g, '')) : 0;
 
-    const stampMatch = block.match(/(?:मुद्रांक\s*शुल्क|Stamp\s*Duty)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const stampDuty = stampMatch ? parseFloat(stampMatch[1].replace(/,/g, '')) : 0;
+    const stampMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:मुद्रांक\s*शुल्क|Stamp\s*Duty)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([०-९\d,]+)/i);
+    const stampDuty = stampMatch ? parseFloat(normalizeDevanagariDigits(stampMatch[1]).replace(/,/g, '')) : 0;
 
-    const regFeeMatch = block.match(/(?:नोंदणी\s*फी|Registration\s*Fee)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([\d,]+)/i);
-    const regFee = regFeeMatch ? parseFloat(regFeeMatch[1].replace(/,/g, '')) : 0;
+    const regFeeMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:नोंदणी\s*फी|Registration\s*Fee)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*([०-९\d,]+)/i);
+    const regFee = regFeeMatch ? parseFloat(normalizeDevanagariDigits(regFeeMatch[1]).replace(/,/g, '')) : 0;
 
     // Parties: Seller / Denara & Buyer / Ghenara
-    const sellerMatch = block.match(/(?:दस्तऐवज\s*करून\s*देणारा|Seller|Licensor)\s*[:\-]?\s*([^\n\r]+)/i);
+    const sellerMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:दस्तऐवज\s*करून\s*देणारा|Seller|Licensor|देणारा)\s*[:\-]?\s*([^\n\r]+)/i);
     const sellerParty = sellerMatch ? sellerMatch[1].trim() : '';
 
-    const buyerMatch = block.match(/(?:दस्तऐवज\s*करून\s*घेणारा|Purchaser|Buyer|Licensee)\s*[:\-]?\s*([^\n\r]+)/i);
+    const buyerMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:दस्तऐवज\s*करून\s*घेणारा|Purchaser|Buyer|Licensee|घेणारा)\s*[:\-]?\s*([^\n\r]+)/i);
     const buyerParty = buyerMatch ? buyerMatch[1].trim() : '';
 
     // Property Description: Flat no, Survey No, Society
-    const descMatch = block.match(/(?:मिळकतीचे\s*वर्णन|Property\s*Description)\s*[:\-]?\s*([\s\S]+?)(?=(?:इतर\s*माहिती|नोंदणी\s*दिनांक|$))/i);
+    const descMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:मिळकतीचे\s*वर्णन|Property\s*Description|वर्णन)\s*[:\-]?\s*([\s\S]+?)(?=(?:इतर\s*माहिती|नोंदणी\s*दिनांक|$))/i);
     const propDesc = descMatch ? descMatch[1].trim().replace(/\s+/g, ' ') : block.slice(0, 300);
+
+    // Extraction Certainty Scoring (Objective A: Distinguish extracted vs inferred values)
+    const fieldConfidence = {
+      docno: docNo ? 'EXTRACTED' : 'INFERRED_DEFAULT',
+      registrationdate: regDate ? 'EXTRACTED' : 'UNSTATED',
+      consideration: consAmt > 0 ? 'EXTRACTED' : 'UNSTATED',
+      parties: (sellerParty && buyerParty) ? 'EXTRACTED' : (sellerParty || buyerParty) ? 'PARTIAL' : 'INFERRED_DEFAULT',
+      property: propDesc.length > 25 ? 'EXTRACTED' : 'BRIEF'
+    };
+
+    let confidenceScore = 100;
+    if (!docNo) confidenceScore -= 20;
+    if (!regDate) confidenceScore -= 20;
+    if (consAmt === 0) confidenceScore -= 15;
+    if (!sellerParty || !buyerParty) confidenceScore -= 20;
+    if (propDesc.length < 25) confidenceScore -= 15;
+
+    const extractionCertainty = confidenceScore >= 80 ? 'HIGH' : confidenceScore >= 50 ? 'MEDIUM' : 'UNCERTAIN';
 
     const parsedRow = {
       docno: docNo || String(1000 + bIdx),
@@ -67,6 +87,11 @@ export function parseIgrIndex2Text(fullText, fileName) {
       source_file: fileName,
       source_sheet: 'PDF_Extract',
       _extractionStatus: 'SUCCESS',
+      _extractionSource: 'DIGITAL_PDF_TEXT',
+      _extractionCertainty: extractionCertainty,
+      _fieldConfidence: fieldConfidence,
+      _confidenceScore: confidenceScore,
+      _rawText: block.trim(),
       _deedIndex: bIdx + 1
     };
 

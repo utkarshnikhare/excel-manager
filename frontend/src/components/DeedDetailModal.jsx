@@ -1,10 +1,21 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatINR } from '../utils/propertyParser';
 
 const DeedDetailModal = ({ deed, onClose }) => {
+  const [showRawText, setShowRawText] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!deed) return null;
 
   const isPropertyDeed = Boolean(deed.docno || deed.society || deed.consideration_amt || deed.propertydescription);
+  const rawDocumentText = deed._rawText || deed.extracted_ocr_text || deed._ocrTextSnippet || '';
 
   const handlePrint = () => {
     window.print();
@@ -25,7 +36,7 @@ const DeedDetailModal = ({ deed, onClose }) => {
       zIndex: 9999,
       padding: '1rem'
     }} onClick={onClose}>
-      <div style={{
+      <div role="dialog" aria-modal="true" aria-label="Document Deed Details" style={{
         background: 'var(--bg-card)',
         color: 'var(--text-main)',
         borderRadius: '16px',
@@ -262,7 +273,76 @@ const DeedDetailModal = ({ deed, onClose }) => {
           </div>
         )}
 
-        {/* Originating Source File Verification Box */}
+        {/* Document Text & Extraction Provenance Section (Objective A) */}
+        {rawDocumentText && (
+          <div style={{
+            background: 'var(--bg-main)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            padding: '0.75rem 1rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                  🔍 Extracted Document Text Stream
+                </span>
+                {deed._extractionCertainty && (
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '4px',
+                    background: deed._extractionCertainty === 'HIGH' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                    color: deed._extractionCertainty === 'HIGH' ? '#047857' : '#b45309'
+                  }}>
+                    Certainty: {deed._extractionCertainty}
+                  </span>
+                )}
+                {deed._ocrStatus && (
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '0.15rem 0.45rem',
+                    borderRadius: '4px',
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    color: '#1d4ed8'
+                  }}>
+                    OCR ({deed._ocrConfidence ? deed._ocrConfidence + '%' : 'WASM'})
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRawText(!showRawText)}
+                className="btn btn-outline"
+                style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                aria-expanded={showRawText}
+              >
+                {showRawText ? 'Hide Raw Text ▲' : 'Inspect Raw Text ▼'}
+              </button>
+            </div>
+            {showRawText && (
+              <pre style={{
+                marginTop: '0.65rem',
+                padding: '0.75rem',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                fontSize: '0.78rem',
+                lineHeight: '1.45',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                color: 'var(--text-main)'
+              }}>
+                {rawDocumentText}
+              </pre>
+            )}
+          </div>
+        )}
+
+                {/* Originating Source File Verification Box */}
         {deed.source_file && (
           <div style={{
             display: 'flex',

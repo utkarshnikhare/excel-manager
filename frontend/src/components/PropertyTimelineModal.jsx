@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { compilePropertyTimeline, findMatchingPropertyRecords } from '../utils/propertyTimeline';
 import { formatINR } from '../utils/propertyParser';
 
 const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!deed) return null;
 
   const matchingRecords = findMatchingPropertyRecords(dataset, deed);
@@ -27,7 +35,7 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
       backdropFilter: 'blur(3px)',
       padding: '1rem'
     }}>
-      <div 
+      <div role="dialog" aria-modal="true" aria-label="Property Chain-of-Title Timeline"
         className="modal-content print-timeline-container" 
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -181,7 +189,21 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
           </div>
         )}
 
-        {/* Chain Ambiguity Warning if detected */}
+        {/* Legal Valuation & Conveyance Methodology Explainer (Objective D) */}
+        <div style={{
+          backgroundColor: 'rgba(59, 130, 246, 0.05)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
+          borderRadius: '8px',
+          padding: '0.65rem 0.85rem',
+          fontSize: '0.78rem',
+          color: 'var(--text-muted, #64748b)',
+          marginBottom: '1.25rem',
+          lineHeight: '1.45'
+        }}>
+          ℹ️ <strong>Valuation Methodology:</strong> Capital appreciation and CAGR are computed exclusively across verified conveyance sales (Sale / Resale) over exact date intervals. Non-conveyance deeds (Partition, Rectification, Mortgage, Gift, Release) are tracked for legal chain-of-title but excluded from appreciation events.
+        </div>
+
+                {/* Chain Ambiguity Warning if detected */}
         {report.hasAmbiguities && (
           <div style={{
             backgroundColor: 'rgba(245, 158, 11, 0.1)',

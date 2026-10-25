@@ -13,8 +13,16 @@ export function normalizeRowData(rawRow, fileName, sheetName, _rowIdx) {
   const keys = Object.keys(rawRow);
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
+    if (k === '' || k.trim() === '') {
+      delete row[k];
+      const fallbackKey = `Column_${i + 1}`;
+      if (row[fallbackKey] === undefined && rawRow[k] !== undefined && rawRow[k] !== '') {
+        row[fallbackKey] = rawRow[k];
+      }
+      continue;
+    }
     const cleanKey = k.toLowerCase().replace(/[\s_\-]+/g, '');
-    if (row[cleanKey] === undefined) {
+    if (cleanKey && row[cleanKey] === undefined) {
       row[cleanKey] = rawRow[k];
     }
   }
@@ -49,10 +57,12 @@ const FileUpload = ({ onDataParsed }) => {
   // Fast decoder for single file buffer (supports UTF-16LE, UTF-8 BOM, binary xlsx/xls, and HTML exports)
   const parseBufferToWorkbook = (XLSX, arrayBuffer, fileName, password = null) => {
     const data = new Uint8Array(arrayBuffer);
+    const isCsv = typeof fileName === 'string' && fileName.toLowerCase().endsWith('.csv');
+    const readOpts = { cellDates: false, ...(isCsv ? { raw: true } : {}) };
 
     // If password provided, decrypt directly
     if (password) {
-      return XLSX.read(data, { type: 'array', password, cellDates: false });
+      return XLSX.read(data, { type: 'array', password, ...readOpts });
     }
 
     // Strategy 1: UTF-16LE BOM (0xFF 0xFE) - standard for Maharashtra IGR exports
@@ -60,7 +70,7 @@ const FileUpload = ({ onDataParsed }) => {
       try {
         const textDecoder = new TextDecoder('utf-16le');
         const text = textDecoder.decode(data);
-        return XLSX.read(text, { type: 'string', cellDates: false });
+        return XLSX.read(text, { type: 'string', ...readOpts });
       } catch {
         // Fall through to binary decoder
       }
@@ -71,7 +81,7 @@ const FileUpload = ({ onDataParsed }) => {
       try {
         const textDecoder = new TextDecoder('utf-8');
         const text = textDecoder.decode(data);
-        return XLSX.read(text, { type: 'string', cellDates: false });
+        return XLSX.read(text, { type: 'string', ...readOpts });
       } catch {
         // Fall through to binary decoder
       }
@@ -79,7 +89,7 @@ const FileUpload = ({ onDataParsed }) => {
 
     // Strategy 3: Standard Binary XLSX / XLS array
     try {
-      return XLSX.read(data, { type: 'array', cellDates: false });
+      return XLSX.read(data, { type: 'array', ...readOpts });
     } catch (binaryErr) {
       // Check for password/encryption error
       const msg = String(binaryErr?.message || '').toLowerCase();
@@ -89,7 +99,7 @@ const FileUpload = ({ onDataParsed }) => {
       // Strategy 4: Fallback UTF-8 String (HTML-table-based .xls)
       const textDecoder = new TextDecoder('utf-8');
       const text = textDecoder.decode(data);
-      return XLSX.read(text, { type: 'string', cellDates: false });
+      return XLSX.read(text, { type: 'string', ...readOpts });
     }
   };
 
