@@ -1,5 +1,6 @@
 import React from 'react';
 import { compilePropertyTimeline, findMatchingPropertyRecords } from '../utils/propertyTimeline';
+import { formatINR } from '../utils/propertyParser';
 
 const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
   if (!deed) return null;
@@ -135,6 +136,50 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
             <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e40af' }}>{report.metrics.formattedTotalStampDuty}</div>
           </div>
         </div>
+
+        {/* Growth & Capital Appreciation Metrics if eligible conveyance deeds exist */}
+        {report.priceAppreciationPct !== undefined && report.initialPrice > 0 && report.latestPrice > 0 && (
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+            <div style={{
+              flex: 1,
+              minWidth: '200px',
+              padding: '0.75rem 1rem',
+              background: report.priceAppreciationPct >= 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+              borderRadius: '8px',
+              border: `1px solid ${report.priceAppreciationPct >= 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`
+            }}>
+              <div style={{ fontSize: '0.75rem', color: report.priceAppreciationPct >= 0 ? '#047857' : '#b91c1c', fontWeight: 600 }}>
+                CAPITAL APPRECIATION
+              </div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 800, color: report.priceAppreciationPct >= 0 ? '#065f46' : '#991b1b' }}>
+                {report.priceAppreciationPct >= 0 ? `+${report.priceAppreciationPct}%` : `${report.priceAppreciationPct}%`}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #64748b)', marginTop: '0.2rem' }}>
+                {formatINR(report.initialPrice)} → {formatINR(report.latestPrice)}
+              </div>
+            </div>
+            {report.cagrPct > 0 && (
+              <div style={{
+                flex: 1,
+                minWidth: '200px',
+                padding: '0.75rem 1rem',
+                background: 'rgba(99, 102, 241, 0.08)',
+                borderRadius: '8px',
+                border: '1px solid rgba(99, 102, 241, 0.25)'
+              }}>
+                <div style={{ fontSize: '0.75rem', color: '#4338ca', fontWeight: 600 }}>
+                  ANNUALIZED RETURN (CAGR)
+                </div>
+                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#3730a3' }}>
+                  {report.cagrPct}% p.a.
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #64748b)', marginTop: '0.2rem' }}>
+                  Across verified sale transfers
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Chain Ambiguity Warning if detected */}
         {report.hasAmbiguities && (

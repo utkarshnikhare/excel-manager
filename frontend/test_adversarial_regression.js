@@ -261,6 +261,57 @@ await test('End-to-end XLSX json_to_sheet creates zero active formula cells', ()
   }
 });
 
+// -------------------------------------------------------------
+// 5. POST-RELEASE REAL BROWSER ADVERSARIAL QA REGRESSIONS
+// -------------------------------------------------------------
+console.log('\n--- 5. Post-Release Real Browser Adversarial QA Regressions ---');
+
+await test('App.css contains zero third-party font imports or external HTTP/HTTPS URLs (Air-gapped privacy)', () => {
+  const css = fs.readFileSync('./src/App.css', 'utf8');
+  assert.strictEqual(css.includes('@import url('), false, 'App.css must not import external fonts or stylesheets');
+  assert.strictEqual(/https?:\/\//i.test(css), false, 'App.css must contain zero external HTTP/HTTPS references');
+  assert.strictEqual(css.includes('-apple-system'), true, 'App.css should specify native system fallback font family');
+});
+
+await test('Property timeline accurately computes and exposes Capital Appreciation and CAGR', () => {
+  const deeds = [
+    {
+      docname: 'खरेदीखत (Sale Deed)',
+      flat_no: '402',
+      society: 'Roseland Residency',
+      wing: 'A',
+      registrationdate: '15/01/2015',
+      consideration_amt: 5000000,
+      partydetails: 'Seller: ABC -> Buyer: XYZ'
+    },
+    {
+      docname: 'खरेदीखत (Sale Deed)',
+      flat_no: '402',
+      society: 'Roseland Residency',
+      wing: 'A',
+      registrationdate: '15/01/2021',
+      consideration_amt: 8500000,
+      partydetails: 'Seller: XYZ -> Buyer: DEF'
+    }
+  ];
+
+  const report = compilePropertyTimeline(deeds, deeds[0]);
+  assert.strictEqual(report.initialPrice, 5000000);
+  assert.strictEqual(report.latestPrice, 8500000);
+  assert.strictEqual(report.priceAppreciationPct, 70); // ((85L - 50L) / 50L) * 100 = +70%
+  assert.ok(report.cagrPct > 9 && report.cagrPct < 10); // ~9.25% p.a. over 6 years
+
+  // Ensure PropertyTimelineModal.jsx includes UI cards for both metrics
+  const modalJsx = fs.readFileSync('./src/components/PropertyTimelineModal.jsx', 'utf8');
+  assert.strictEqual(modalJsx.includes('CAPITAL APPRECIATION'), true, 'Modal JSX must render CAPITAL APPRECIATION card');
+  assert.strictEqual(modalJsx.includes('ANNUALIZED RETURN (CAGR)'), true, 'Modal JSX must render ANNUALIZED RETURN (CAGR) card');
+});
+
+await test('App.jsx provides dynamic error styling for storage quota failure toasts', () => {
+  const appJsx = fs.readFileSync('./src/App.jsx', 'utf8');
+  assert.strictEqual(appJsx.includes("saveToast.includes('⚠️') ? '#dc2626' : '#16a34a'"), true, 'Save toast must render red on quota warning');
+});
+
 console.log('\n================================================================');
 console.log(`🎉 REGRESSION TESTS SUMMARY: ${passCount}/${totalCount} PASSED`);
 console.log('================================================================\n');

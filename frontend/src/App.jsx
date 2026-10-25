@@ -392,7 +392,11 @@ function App() {
                     <span>💾</span> {isSavingWorkspace ? 'Saving...' : 'Save Session'}
                   </button>
                   {saveToast && (
-                    <span style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700 }}>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      color: saveToast.includes('⚠️') ? '#dc2626' : '#16a34a',
+                      fontWeight: 700
+                    }}>
                       {saveToast}
                     </span>
                   )}
