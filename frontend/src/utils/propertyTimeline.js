@@ -359,9 +359,16 @@ export function compilePropertyTimeline(arg1, arg2) {
       priceAppreciationPct = Math.round(((latestPrice - initialPrice) / initialPrice) * 10000) / 100;
       const dateOldest = parseRecordDate(firstSale.registrationdate);
       const dateNewest = parseRecordDate(lastSale.registrationdate);
-      const yearsDiff = Math.max(0.5, (dateNewest.getTime() - dateOldest.getTime()) / (365.25 * 24 * 3600 * 1000));
-      if (latestPrice > initialPrice && yearsDiff >= 1) {
-        cagrPct = Math.round((Math.pow(latestPrice / initialPrice, 1 / yearsDiff) - 1) * 10000) / 100;
+      const isOldestValid = dateOldest && dateOldest.getFullYear() > 1970;
+      const isNewestValid = dateNewest && dateNewest.getFullYear() > 1970;
+      const timeDiff = dateNewest.getTime() - dateOldest.getTime();
+
+      // Calculate CAGR only when chronology is forward in time and dates are genuine
+      if (isOldestValid && isNewestValid && timeDiff > 0 && latestPrice > initialPrice) {
+        const yearsDiff = timeDiff / (365.25 * 24 * 3600 * 1000);
+        if (yearsDiff >= 0.5) {
+          cagrPct = Math.round((Math.pow(latestPrice / initialPrice, 1 / yearsDiff) - 1) * 10000) / 100;
+        }
       }
     }
   }

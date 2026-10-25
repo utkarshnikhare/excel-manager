@@ -312,6 +312,128 @@ await test('App.jsx provides dynamic error styling for storage quota failure toa
   assert.strictEqual(appJsx.includes("saveToast.includes('⚠️') ? '#dc2626' : '#16a34a'"), true, 'Save toast must render red on quota warning');
 });
 
+
+await test('Standard CAGR independently validated: 50L (2018) to 85L (2024) yields exactly 70% appreciation and 9.25% p.a.', () => {
+  const deeds = [
+    {
+      docname: 'खरेदीखत (Sale Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      wing: 'A',
+      registrationdate: '15/01/2018',
+      consideration_amt: 5000000,
+      partydetails: 'Developer ABC -> Buyer XYZ'
+    },
+    {
+      docname: 'खरेदीखत (Sale Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      wing: 'A',
+      registrationdate: '15/01/2024',
+      consideration_amt: 8500000,
+      partydetails: 'Seller XYZ -> Buyer PQR'
+    }
+  ];
+
+  const report = compilePropertyTimeline(deeds, deeds[0]);
+  assert.strictEqual(report.initialPrice, 5000000);
+  assert.strictEqual(report.latestPrice, 8500000);
+  assert.strictEqual(report.priceAppreciationPct, 70);
+  assert.strictEqual(report.cagrPct, 9.25); // Exactly 9.25% p.a. over 6.0 years
+});
+
+await test('Non-conveyance deeds (Partition, Rectification, Mortgage, Gift, Release) are excluded from price events', () => {
+  const deeds = [
+    {
+      docname: 'खरेदीखत (Sale Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      registrationdate: '15/01/2018',
+      consideration_amt: 5000000,
+      partydetails: 'Developer ABC -> Buyer XYZ'
+    },
+    {
+      docname: 'वाटपपत्र (Partition Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      registrationdate: '20/06/2019',
+      consideration_amt: 0,
+      partydetails: 'Co-Sharer A -> Allottee B'
+    },
+    {
+      docname: 'दुरुस्तीपत्र (Rectification Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      registrationdate: '10/08/2020',
+      consideration_amt: 500,
+      partydetails: 'Executing Party -> Claimant'
+    },
+    {
+      docname: 'गहाणखत (Mortgage Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      registrationdate: '12/12/2021',
+      consideration_amt: 4000000,
+      partydetails: 'Borrower -> Bank'
+    },
+    {
+      docname: 'बक्षीसपत्र (Gift Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      registrationdate: '05/05/2022',
+      consideration_amt: 0,
+      partydetails: 'Donor -> Donee'
+    },
+    {
+      docname: 'खरेदीखत (Sale Deed)',
+      flat_no: '302',
+      society: 'Kumar Primavera',
+      registrationdate: '15/01/2024',
+      consideration_amt: 8500000,
+      partydetails: 'Seller XYZ -> Buyer PQR'
+    }
+  ];
+
+  const report = compilePropertyTimeline(deeds, deeds[0]);
+  assert.strictEqual(report.initialPrice, 5000000);
+  assert.strictEqual(report.latestPrice, 8500000);
+  assert.strictEqual(report.priceAppreciationPct, 70);
+  assert.strictEqual(report.cagrPct, 9.25);
+  // Total consideration includes recorded sums, but appreciation solely tracks conveyance sales
+  assert.strictEqual(report.metrics.totalDeeds, 6);
+});
+
+await test('Missing dates, zero prices, and invalid inverted chronology gracefully yield zero CAGR without crashing', () => {
+  // Case A: Missing registration dates
+  const noDates = [
+    { docname: 'खरेदीखत (Sale Deed)', flat_no: '101', society: 'Solitaire', consideration_amt: 5000000 },
+    { docname: 'खरेदीखत (Sale Deed)', flat_no: '101', society: 'Solitaire', consideration_amt: 8000000 }
+  ];
+  const repA = compilePropertyTimeline(noDates, noDates[0]);
+  assert.strictEqual(repA.priceAppreciationPct, 60);
+  assert.strictEqual(repA.cagrPct, 0); // No valid dates -> CAGR cannot be determined
+
+  // Case B: Zero prices
+  const zeroPrice = [
+    { docname: 'खरेदीखत (Sale Deed)', flat_no: '101', society: 'Solitaire', registrationdate: '15/01/2018', consideration_amt: 0 },
+    { docname: 'खरेदीखत (Sale Deed)', flat_no: '101', society: 'Solitaire', registrationdate: '15/01/2024', consideration_amt: 0 }
+  ];
+  const repB = compilePropertyTimeline(zeroPrice, zeroPrice[0]);
+  assert.strictEqual(repB.priceAppreciationPct, 0);
+  assert.strictEqual(repB.cagrPct, 0);
+
+  // Case C: Inverted chronology (Newer deed dated BEFORE older deed)
+  const invertedDates = [
+    { docname: 'खरेदीखत (Sale Deed)', flat_no: '101', society: 'Solitaire', registrationdate: '15/01/2024', consideration_amt: 8000000 },
+    { docname: 'खरेदीखत (Sale Deed)', flat_no: '101', society: 'Solitaire', registrationdate: '15/01/2018', consideration_amt: 5000000 }
+  ];
+  // compilePropertyTimeline automatically sorts chronologically, so initial is 50L (2018) and latest is 80L (2024)
+  const repC = compilePropertyTimeline(invertedDates, invertedDates[0]);
+  assert.strictEqual(repC.initialPrice, 5000000);
+  assert.strictEqual(repC.latestPrice, 8000000);
+  assert.ok(repC.cagrPct > 0);
+});
+
 console.log('\n================================================================');
 console.log(`🎉 REGRESSION TESTS SUMMARY: ${passCount}/${totalCount} PASSED`);
 console.log('================================================================\n');

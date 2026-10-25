@@ -10,6 +10,168 @@ const ARTIFACTS_DIR = path.resolve('qa_artifacts');
 const SCREENSHOTS_DIR = path.resolve('qa_artifacts/screenshots');
 if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
+function ensureSyntheticDatasets() {
+  if (!fs.existsSync(ARTIFACTS_DIR)) fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+
+  const corruptPdf = path.join(ARTIFACTS_DIR, 'corrupt_test.pdf');
+  if (!fs.existsSync(corruptPdf)) {
+    fs.writeFileSync(corruptPdf, Buffer.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x11, 0x22, 0x33, 0xff, 0xfe]));
+  }
+
+  const deedsPath = path.join(ARTIFACTS_DIR, 'synthetic_property_deeds.xlsx');
+  if (!fs.existsSync(deedsPath)) {
+    const deeds = [
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'खरेदीखत (Sale Deed)',
+        'दस्त क्र. (Doc No)': 1001,
+        'नोंदणी दिनांक (Reg Date)': '15/01/2015',
+        'मोबदला (Consideration)': 5000000,
+        'बाजारमूल्य (Market Value)': 4800000,
+        'मुद्रांक शुल्क (Stamp Duty)': 250000,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, विंग ए, ३ रा मजला, कुमार प्राइमेरा (Kumar Primavera), सर्वे नं. ४२, लोहगाव, पुणे',
+        'पक्षकारांचे तपशील (Party Details)': 'देणारा: बिल्डर मेसर्स कुमार असोसिएट्स (Seller/Developer) -> घेणारा: राहुल शर्मा (Buyer: Rahul Sharma)',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': 'A',
+        'क्षेत्रफळ (Area)': '850 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'वाटपपत्र (Partition Deed)',
+        'दस्त क्र. (Doc No)': 1002,
+        'नोंदणी दिनांक (Reg Date)': '15/06/2017',
+        'मोबदला (Consideration)': 0,
+        'बाजारमूल्य (Market Value)': 5500000,
+        'मुद्रांक शुल्क (Stamp Duty)': 1000,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, विंग ए, कुमार प्राइमेरा (Kumar Primavera), लोहगाव',
+        'पक्षकारांचे तपशील (Party Details)': 'सहहिस्सेदार: राहुल शर्मा -> वाटप घेणारा: राहुल शर्मा व बंधू',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': 'A',
+        'क्षेत्रफळ (Area)': '850 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'दुरुस्तीपत्र (Rectification Deed)',
+        'दस्त क्र. (Doc No)': 1003,
+        'नोंदणी दिनांक (Reg Date)': '10/11/2018',
+        'मोबदला (Consideration)': 500,
+        'बाजारमूल्य (Market Value)': 0,
+        'मुद्रांक शुल्क (Stamp Duty)': 500,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, विंग ए, कुमार प्राइमेरा, लोहगाव',
+        'पक्षकारांचे तपशील (Party Details)': 'करून देणारा: राहुल शर्मा -> करून घेणारा: राहुल शर्मा',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': 'A',
+        'क्षेत्रफळ (Area)': '850 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'गहाणखत (Mortgage Deed)',
+        'दस्त क्र. (Doc No)': 1004,
+        'नोंदणी दिनांक (Reg Date)': '20/03/2019',
+        'मोबदला (Consideration)': 4000000,
+        'बाजारमूल्य (Market Value)': 6500000,
+        'मुद्रांक शुल्क (Stamp Duty)': 20000,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, विंग ए, कुमार प्राइमेरा, लोहगाव',
+        'पक्षकारांचे तपशील (Party Details)': 'गहाण ठेवणारा: राहुल शर्मा -> गहाण घेणारा: एचडीएफसी बँक (HDFC Bank Ltd)',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': 'A',
+        'क्षेत्रफळ (Area)': '850 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'खरेदीखत (Sale Deed - Resale)',
+        'दस्त क्र. (Doc No)': 1005,
+        'नोंदणी दिनांक (Reg Date)': '15/01/2021',
+        'मोबदला (Consideration)': 8500000,
+        'बाजारमूल्य (Market Value)': 8200000,
+        'मुद्रांक शुल्क (Stamp Duty)': 425000,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, विंग ए, ३ रा मजला, कुमार प्राइमेरा (Kumar Primavera), सर्वे नं. ४२, लोहगाव',
+        'पक्षकारांचे तपशील (Party Details)': 'देणारा: राहुल शर्मा (Seller: Rahul Sharma) -> घेणारा: अमित वर्मा (Buyer: Amit Verma)',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': 'A',
+        'क्षेत्रफळ (Area)': '850 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'खरेदीखत (Sale Deed)',
+        'दस्त क्र. (Doc No)': 2001,
+        'नोंदणी दिनांक (Reg Date)': '01/02/2020',
+        'मोबदला (Consideration)': 5200000,
+        'बाजारमूल्य (Market Value)': 5000000,
+        'मुद्रांक शुल्क (Stamp Duty)': 260000,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, विंग बी (Wing B), कुमार प्राइमेरा, लोहगाव',
+        'पक्षकारांचे तपशील (Party Details)': 'देणारा: मेसर्स कुमार बिल्डर्स -> घेणारा: सुमित कुलकर्णी',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': 'B',
+        'क्षेत्रफळ (Area)': '850 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'खरेदीखत (Sale Deed)',
+        'दस्त क्र. (Doc No)': 3001,
+        'नोंदणी दिनांक (Reg Date)': '10/05/2021',
+        'मोबदला (Consideration)': 6000000,
+        'बाजारमूल्य (Market Value)': 5800000,
+        'मुद्रांक शुल्क (Stamp Duty)': 300000,
+        'मिळकत वर्णन (Property Description)': 'सदनिका क्र. ३०२, एरोपोलिस (Aeropolis), लोहगाव',
+        'पक्षकारांचे तपशील (Party Details)': 'देणारा: एरो असोसिएट्स -> घेणारा: पूजा देशपांडे',
+        'सदनिका क्र. (Flat No)': '302',
+        'सोसायटी (Society)': 'Aeropolis',
+        'विंग (Wing)': 'A',
+        'क्षेत्रफळ (Area)': '820 sq.ft'
+      },
+      {
+        'दस्तऐवजाचा प्रकार (Doc Name)': 'विकास करार (Development Agreement)',
+        'दस्त क्र. (Doc No)': 4001,
+        'नोंदणी दिनांक (Reg Date)': '01/01/2012',
+        'मोबदला (Consideration)': 15000000,
+        'बाजारमूल्य (Market Value)': 15000000,
+        'मुद्रांक शुल्क (Stamp Duty)': 750000,
+        'मिळकत वर्णन (Property Description)': 'सर्वे नं. ४२, लोहगाव, पुणे - संपूर्ण जमीन विकास करार',
+        'पक्षकारांचे तपशील (Party Details)': 'जमीन मालक: ज्ञानेश्वर पाटील -> विकासक: मेसर्स कुमार प्राइमेरा डेव्हलपर्स',
+        'सदनिका क्र. (Flat No)': '—',
+        'सो सोसायटी (Society)': 'Kumar Primavera',
+        'विंग (Wing)': '—',
+        'क्षेत्रफळ (Area)': '2 Acre'
+      }
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(deeds);
+    XLSX.utils.book_append_sheet(wb, ws, 'Deeds');
+    fs.writeFileSync(deedsPath, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  }
+
+  const secPath = path.join(ARTIFACTS_DIR, 'adversarial_security_dataset.xlsx');
+  if (!fs.existsSync(secPath)) {
+    const secRows = [
+      {
+        '=cmd|"/C calc"!A0': 'Normal Value',
+        '@SUM(1,2)': '=HYPERLINK("https://attacker.example","click")',
+        '+1+2': ' =cmd|"/C calc"!A0',
+        '-2+3': '   =1+1',
+        '|calc.exe': '
+=1+1',
+        '%COMSPEC%': '
+=cmd|...',
+        'NegInt': -500,
+        'NegFloat': -12.34,
+        'NegString': '-500',
+        'LeadingZero': '00123',
+        'Phone': '09820011223',
+        'Marathi': 'ज्ञानेश्वर विठ्ठल पाटील',
+        'ScriptXSS': '<script>window.__xss_executed=true</script>',
+        'ImgXSS': '<img src=x onerror=window.__xss_executed=true>'
+      }
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(secRows);
+    XLSX.utils.book_append_sheet(wb, ws, 'SecurityTest');
+    fs.writeFileSync(secPath, XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  }
+}
+ensureSyntheticDatasets();
+
+
 console.log('================================================================');
 console.log('🕵️ POST-RELEASE ADVERSARIAL REAL-BROWSER QA & AUDIT SUITE');
 console.log('================================================================');
