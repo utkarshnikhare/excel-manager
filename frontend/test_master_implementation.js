@@ -2,7 +2,9 @@ import assert from 'assert';
 import {
   findMatchingPropertyRecords,
   compilePropertyTimeline,
-  parseRecordDate
+  parseRecordDate,
+  getPartyRoleLabels,
+  extractWingIdentifier
 } from './src/utils/propertyTimeline.js';
 import { executeSmartSearch } from './src/utils/searchLogic.js';
 import { renderHighlightedText } from './src/utils/highlightHelper.js';
@@ -128,8 +130,6 @@ runTest('compilePropertyTimeline: Identifies seller and buyer correctly', () => 
 
 runTest('compilePropertyTimeline: Verifies continuous chain-of-title without gap warnings', () => {
   const timeline = compilePropertyTimeline(sampleDeed1, dataset);
-  // Deed 1 Buyer (Ramesh Joshi) == Deed 2 Seller (Ramesh Joshi)
-  // Deed 2 Buyer (Sanjay Patil) == Deed 3 Seller (Sanjay Patil)
   assert.strictEqual(timeline.hasContinuityWarning, false);
   assert.strictEqual(timeline.transactions[1].isContinuityGap, false);
   assert.strictEqual(timeline.transactions[2].isContinuityGap, false);
@@ -157,9 +157,71 @@ runTest('compilePropertyTimeline: Computes capital appreciation & CAGR metrics',
   const timeline = compilePropertyTimeline(sampleDeed1, dataset);
   assert.strictEqual(timeline.initialPrice, 4500000);
   assert.strictEqual(timeline.latestPrice, 8500000);
-  // Appreciation: (85L - 45L) / 45L * 100 = 88.89%
   assert(timeline.priceAppreciationPct >= 88 && timeline.priceAppreciationPct <= 89);
   assert(timeline.cagrPct > 0);
+});
+
+// Quality Gate Enhancement Tests
+runTest('Dynamic Party Roles: Labels Mortgage as Mortgagor/Borrower and Mortgagee/Bank', () => {
+  const mortgageRoles = getPartyRoleLabels('गहाणखत (Mortgage Deed)');
+  assert.strictEqual(mortgageRoles.isConveyance, false);
+  assert(mortgageRoles.role1Label.includes('Borrower'));
+  assert(mortgageRoles.role2Label.includes('Bank') || mortgageRoles.role2Label.includes('Mortgagee'));
+  assert.strictEqual(mortgageRoles.verb, 'PLEDGED TO');
+});
+
+runTest('Dynamic Party Roles: Labels Gift Deed as Donor and Donee', () => {
+  const giftRoles = getPartyRoleLabels('बक्षीसपत्र (Gift Deed)');
+  assert.strictEqual(giftRoles.isConveyance, false);
+  assert(giftRoles.role1Label.includes('Donor'));
+  assert(giftRoles.role2Label.includes('Donee'));
+  assert.strictEqual(giftRoles.verb, 'GIFTED TO');
+});
+
+runTest('Wing Disambiguation: Keeps Wing A Flat 504 and Wing B Flat 504 separate', () => {
+  const deedWingA = {
+    docno: '5001',
+    society: 'Skyline Heights',
+    flat_no: '504',
+    propertydescription: 'Building A Wing Flat No 504'
+  };
+  const deedWingB = {
+    docno: '5002',
+    society: 'Skyline Heights',
+    flat_no: '504',
+    propertydescription: 'Building B Wing Flat No 504'
+  };
+  assert.strictEqual(extractWingIdentifier(deedWingA), 'a');
+  assert.strictEqual(extractWingIdentifier(deedWingB), 'b');
+
+  const matchesForA = findMatchingPropertyRecords(deedWingA, [deedWingA, deedWingB]);
+  assert.strictEqual(matchesForA.length, 1);
+  assert.strictEqual(matchesForA[0].docno, '5001');
+});
+
+runTest('Deduplication: Duplicate deeds in input array are safely collapsed', () => {
+  const duplicateDeeds = [sampleDeed1, sampleDeed1, sampleDeed2];
+  const timeline = compilePropertyTimeline(sampleDeed1, duplicateDeeds);
+  assert.strictEqual(timeline.totalTransactions, 2);
+});
+
+runTest('Appreciation Calculation: Excludes nominal Gift/Release from latest sale price', () => {
+  const giftDeed = {
+    docno: '5555',
+    docname: 'बक्षीसपत्र (Gift Deed)',
+    registrationdate: '15/12/2025',
+    society: 'Aeropolis',
+    flat_no: '504',
+    party1: 'Vikram Deshmukh',
+    party2: 'Aditya Deshmukh (Son)',
+    consideration_amt: '0' // Nominal ₹ 0
+  };
+  const datasetWithGift = [...dataset, giftDeed];
+  const timeline = compilePropertyTimeline(sampleDeed1, datasetWithGift);
+  // Total deeds in history = 4 (Sale, Resale, Resale, Gift)
+  assert.strictEqual(timeline.totalTransactions, 4);
+  // Latest conveyance price remains the last genuine arms-length sale: 85,00,000 (NOT 0)
+  assert.strictEqual(timeline.latestPrice, 8500000);
 });
 
 // -------------------------------------------------------------
@@ -178,7 +240,6 @@ runTest('renderHighlightedText: Returns plain string if text or tokens empty', (
 runTest('renderHighlightedText: Highlights matching token without dangerouslySetInnerHTML', () => {
   const res = renderHighlightedText('Sanjay Vitthal Patil', ['Patil']);
   assert(Array.isArray(res));
-  // Structure: ['Sanjay Vitthal ', <mark key=1>Patil</mark>]
   assert.strictEqual(res[0], 'Sanjay Vitthal ');
   assert(res[1] && res[1].type === 'mark');
   assert.strictEqual(res[1].props.children, 'Patil');
@@ -188,7 +249,6 @@ runTest('renderHighlightedText: XSS Safety — Treats raw HTML scripts as harmle
   const maliciousInput = '<script>alert("XSS")</script>';
   const res = renderHighlightedText(maliciousInput, ['script']);
   assert(Array.isArray(res));
-  // The output contains React elements, not unescaped raw HTML injection
   const renderedText = res.map(part => typeof part === 'string' ? part : part.props.children).join('');
   assert.strictEqual(renderedText, maliciousInput);
 });
@@ -232,13 +292,11 @@ runTest('Person Search: Smart Search matches First + Last Name across Devanagari
 });
 
 runTest('Person Search: Role filter restricts search to party1 or party2', () => {
-  // Search for ज्ञानेश्वर पाटील as party1 (Seller)
   const conditionsSeller = [{ column: 'party1', query: 'Dnyaneshwar Patil' }];
   const sellerResults = executeSmartSearch(mixedRecords, conditionsSeller, 'AND', false);
   assert.strictEqual(sellerResults.length, 1);
   assert.strictEqual(sellerResults[0].docno, '102');
 
-  // Search for ज्ञानेश्वर पाटील as party2 (Buyer)
   const conditionsBuyer = [{ column: 'party2', query: 'Dnyaneshwar Patil' }];
   const buyerResults = executeSmartSearch(mixedRecords, conditionsBuyer, 'AND', false);
   assert.strictEqual(buyerResults.length, 1);

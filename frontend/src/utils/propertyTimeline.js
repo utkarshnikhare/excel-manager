@@ -12,6 +12,66 @@ export function normalizeUnitId(str) {
     .trim();
 }
 
+// Extract Wing/Building/Tower identifier to keep distinct towers with same flat numbers separate
+export function extractWingIdentifier(record) {
+  if (!record) return '';
+  if (record.wing) return String(record.wing).trim().toLowerCase();
+  const desc = String(record.propertydescription || record.PropertyDescription || '');
+  const match = desc.match(/(?:विंग|wing|building|इमारत|tower|टावर)\s*[:\-]?\s*([a-z0-9]+)/i);
+  return match ? match[1].toLowerCase().trim() : '';
+}
+
+// Get contextual party role labels according to deed type
+export function getPartyRoleLabels(docName) {
+  const d = String(docName || '').toLowerCase();
+  if (/गहाण|तारण|mortgage/i.test(d)) {
+    return {
+      role1Label: 'Borrower / Mortgagor (गहाण ठेवणारा)',
+      role2Label: 'Lender / Mortgagee / Bank (गहाण घेणारा)',
+      verb: 'PLEDGED TO',
+      isConveyance: false
+    };
+  }
+  if (/बक्षीस|दान|gift/i.test(d)) {
+    return {
+      role1Label: 'Donor (देणारा पक्षकार)',
+      role2Label: 'Donee (घेणारा पक्षकार)',
+      verb: 'GIFTED TO',
+      isConveyance: false
+    };
+  }
+  if (/हक्कसोड|सोडपत्र|release/i.test(d)) {
+    return {
+      role1Label: 'Releasor (हक्क सोडणारा)',
+      role2Label: 'Releasee (हक्क मिळवणारा)',
+      verb: 'RELEASED TO',
+      isConveyance: false
+    };
+  }
+  if (/लिव्ह|लायसन्स|भाडे|lease|license/i.test(d)) {
+    return {
+      role1Label: 'Licensor / Landlord (परवाना देणारा)',
+      role2Label: 'Licensee / Tenant (परवाना घेणारा)',
+      verb: 'LICENSED TO',
+      isConveyance: false
+    };
+  }
+  if (/कुलमुखत्यार|poa|power\s*of\s*attorney/i.test(d)) {
+    return {
+      role1Label: 'Principal (कुलमुखत्यार देणारा)',
+      role2Label: 'Attorney / Agent (कुलमुखत्यार)',
+      verb: 'APPOINTED',
+      isConveyance: false
+    };
+  }
+  return {
+    role1Label: 'Transferor / Seller (देणारा पक्षकार)',
+    role2Label: 'Transferee / Purchaser (घेणारा पक्षकार)',
+    verb: 'TRANSFERRED TO',
+    isConveyance: true
+  };
+}
+
 // Find all transactions matching the target property's composite coordinates
 export function findMatchingPropertyRecords(arg1, arg2) {
   // Gracefully accept either (dataset, targetRecord) or (targetRecord, dataset)
@@ -28,10 +88,16 @@ export function findMatchingPropertyRecords(arg1, arg2) {
     return [targetRecord];
   }
 
+  const targetWing = extractWingIdentifier(targetRecord);
+
   return dataset.filter(row => {
     // Flat/Unit must match
     const rowFlat = normalizeUnitId(row.flat_no);
     if (!rowFlat || rowFlat !== targetFlat) return false;
+
+    // Wing disambiguation: If both specify a wing and they conflict, do not merge!
+    const rowWing = extractWingIdentifier(row);
+    if (targetWing && rowWing && targetWing !== rowWing) return false;
 
     // Society must match or be closely related
     const rowSociety = String(row.society || '').toLowerCase().trim();
@@ -91,8 +157,19 @@ export function compilePropertyTimeline(arg1, arg2) {
     };
   }
 
+  // Deduplicate identical duplicate deeds (e.g. from multi-file re-uploads)
+  const seenDeeds = new Set();
+  const dedupedRecords = [];
+  for (const r of records) {
+    const key = `${r.docno || ''}_${r.registrationdate || ''}_${r.source_file || ''}`;
+    if (!seenDeeds.has(key)) {
+      seenDeeds.add(key);
+      dedupedRecords.push(r);
+    }
+  }
+
   // Sort chronologically (oldest deed first)
-  const sorted = [...records].sort((a, b) => {
+  const sorted = [...dedupedRecords].sort((a, b) => {
     const dateA = parseRecordDate(a.registrationdate);
     const dateB = parseRecordDate(b.registrationdate);
     return dateA.getTime() - dateB.getTime();
@@ -119,11 +196,13 @@ export function compilePropertyTimeline(arg1, arg2) {
     const docName = String(deed.docname || 'Index-II Registration').trim();
     const date = deed.registrationdate || '—';
 
+    const roleInfo = getPartyRoleLabels(docName);
+
     // Check for ownership continuity gaps between resale transactions
     let isChainGap = false;
     let gapNote = '';
 
-    if (index > 0 && previousPurchaser && /खरेदीखत|sale\s*deed|करार|agreement|resale/i.test(docName)) {
+    if (index > 0 && previousPurchaser && roleInfo.isConveyance) {
       const prevNorm = previousPurchaser.toLowerCase().replace(/[^a-z0-9]/g, '');
       const currSellerNorm = seller.toLowerCase().replace(/[^a-z0-9]/g, '');
       
@@ -135,7 +214,7 @@ export function compilePropertyTimeline(arg1, arg2) {
       }
     }
 
-    if (/खरेदीखत|sale\s*deed|करार|agreement|resale/i.test(docName)) {
+    if (roleInfo.isConveyance) {
       previousPurchaser = buyer;
     }
 
@@ -149,6 +228,10 @@ export function compilePropertyTimeline(arg1, arg2) {
       seller,
       purchaserparty: buyer,
       buyer,
+      role1Label: roleInfo.role1Label,
+      role2Label: roleInfo.role2Label,
+      transferVerb: roleInfo.verb,
+      isConveyance: roleInfo.isConveyance,
       consideration_amt: cons,
       formattedConsideration: formatINR(cons),
       stampdutypaid: stamp,
@@ -165,26 +248,39 @@ export function compilePropertyTimeline(arg1, arg2) {
 
   const rep = targetRecord || sorted[0];
 
-  const initialDeed = sorted[0];
-  const latestDeed = sorted[sorted.length - 1];
-  const initialPrice = typeof initialDeed?.consideration_amt === 'number'
-    ? initialDeed.consideration_amt
-    : parseFloat(String(initialDeed?.consideration_amt || 0).replace(/[^0-9.]/g, '')) || 0;
-  const latestPrice = typeof latestDeed?.consideration_amt === 'number'
-    ? latestDeed.consideration_amt
-    : parseFloat(String(latestDeed?.consideration_amt || 0).replace(/[^0-9.]/g, '')) || 0;
+  // Calculate capital appreciation & CAGR strictly on qualifying arms-length conveyance/sale deeds
+  const conveyanceDeeds = sorted.filter(d => {
+    const cons = typeof d.consideration_amt === 'number'
+      ? d.consideration_amt
+      : parseFloat(String(d.consideration_amt || 0).replace(/[^0-9.]/g, '')) || 0;
+    const doc = String(d.docname || '');
+    return cons > 0 && getPartyRoleLabels(doc).isConveyance;
+  });
 
+  let initialPrice = 0;
+  let latestPrice = 0;
   let priceAppreciationPct = 0;
-  if (initialPrice > 0 && latestPrice > 0) {
-    priceAppreciationPct = Math.round(((latestPrice - initialPrice) / initialPrice) * 10000) / 100;
-  }
-
-  const dateOldest = parseRecordDate(initialDeed?.registrationdate);
-  const dateNewest = parseRecordDate(latestDeed?.registrationdate);
-  const yearsDiff = Math.max(1, (dateNewest.getTime() - dateOldest.getTime()) / (365.25 * 24 * 3600 * 1000));
   let cagrPct = 0;
-  if (initialPrice > 0 && latestPrice > initialPrice && yearsDiff >= 1) {
-    cagrPct = Math.round((Math.pow(latestPrice / initialPrice, 1 / yearsDiff) - 1) * 10000) / 100;
+
+  if (conveyanceDeeds.length >= 1) {
+    const firstSale = conveyanceDeeds[0];
+    const lastSale = conveyanceDeeds[conveyanceDeeds.length - 1];
+    initialPrice = typeof firstSale.consideration_amt === 'number'
+      ? firstSale.consideration_amt
+      : parseFloat(String(firstSale.consideration_amt || 0).replace(/[^0-9.]/g, '')) || 0;
+    latestPrice = typeof lastSale.consideration_amt === 'number'
+      ? lastSale.consideration_amt
+      : parseFloat(String(lastSale.consideration_amt || 0).replace(/[^0-9.]/g, '')) || 0;
+
+    if (conveyanceDeeds.length > 1 && initialPrice > 0 && latestPrice > 0) {
+      priceAppreciationPct = Math.round(((latestPrice - initialPrice) / initialPrice) * 10000) / 100;
+      const dateOldest = parseRecordDate(firstSale.registrationdate);
+      const dateNewest = parseRecordDate(lastSale.registrationdate);
+      const yearsDiff = Math.max(0.5, (dateNewest.getTime() - dateOldest.getTime()) / (365.25 * 24 * 3600 * 1000));
+      if (latestPrice > initialPrice && yearsDiff >= 1) {
+        cagrPct = Math.round((Math.pow(latestPrice / initialPrice, 1 / yearsDiff) - 1) * 10000) / 100;
+      }
+    }
   }
 
   return {

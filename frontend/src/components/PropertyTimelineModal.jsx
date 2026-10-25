@@ -201,12 +201,19 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
                 {/* Parties Involved */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0', background: 'var(--bg-card, #ffffff)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid var(--border-color, #e2e8f0)' }}>
                   <div>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted, #64748b)', display: 'block', fontWeight: 600 }}>TRANSFEROR / SELLER</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted, #64748b)', display: 'block', fontWeight: 600 }}>
+                      {item.role1Label || 'TRANSFEROR / PARTY 1'}
+                    </span>
                     <strong style={{ fontSize: '0.85rem', color: '#b91c1c' }}>{item.sellerparty}</strong>
                   </div>
-                  <div style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '1.1rem', fontWeight: 800 }}>➔</div>
+                  <div style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center' }}>
+                    <div>➔</div>
+                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase' }}>{item.transferVerb || 'TO'}</span>
+                  </div>
                   <div>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted, #64748b)', display: 'block', fontWeight: 600 }}>TRANSFEREE / BUYER</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted, #64748b)', display: 'block', fontWeight: 600 }}>
+                      {item.role2Label || 'TRANSFEREE / PARTY 2'}
+                    </span>
                     <strong style={{ fontSize: '0.85rem', color: '#15803d' }}>{item.purchaserparty}</strong>
                   </div>
                 </div>
