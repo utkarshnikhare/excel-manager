@@ -8,6 +8,7 @@ import KPIDashboard from './components/KPIDashboard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { hashRecord, warmSearchIndex } from './utils/searchLogic';
 import { enrichRow } from './utils/propertyParser';
+import { saveWorkspace, loadWorkspace, clearWorkspace } from './utils/workspaceStorage';
 
 function App() {
   const [masterData, setMasterData] = useState(null);
@@ -17,6 +18,64 @@ function App() {
   const [theme, setTheme] = useState('light'); 
   const [activeSociety, setActiveSociety] = useState('');
   const [viewMode, setViewMode] = useState('search'); // 'search' or 'explore'
+  const [savedWorkspacePrompt, setSavedWorkspacePrompt] = useState(null);
+  const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
+  const [saveToast, setSaveToast] = useState('');
+
+  // Check for saved workspace in browser IndexedDB on mount
+  useEffect(() => {
+    async function checkSavedWorkspace() {
+      try {
+        const saved = await loadWorkspace();
+        if (saved && saved.masterData && saved.masterData.length > 0) {
+          setSavedWorkspacePrompt(saved);
+        }
+      } catch (err) {
+        console.warn('Could not inspect saved workspace:', err);
+      }
+    }
+    checkSavedWorkspace();
+  }, []);
+
+  // Debounced auto-save to IndexedDB whenever masterData or stagedData updates
+  useEffect(() => {
+    if (!masterData || masterData.length === 0) return;
+    const timer = setTimeout(() => {
+      saveWorkspace({
+        masterData,
+        fileMeta,
+        stagedData
+      }).catch(err => console.warn('Auto-save error:', err));
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [masterData, fileMeta, stagedData]);
+
+  const handleRestoreWorkspace = () => {
+    if (!savedWorkspacePrompt) return;
+    setMasterData(savedWorkspacePrompt.masterData);
+    setFileMeta(savedWorkspacePrompt.fileMeta);
+    setStagedData(savedWorkspacePrompt.stagedData || []);
+    setIsDone(false);
+    setActiveSociety('');
+    setSavedWorkspacePrompt(null);
+    if (savedWorkspacePrompt.masterData.length > 0) {
+      setTimeout(() => warmSearchIndex(savedWorkspacePrompt.masterData), 50);
+    }
+  };
+
+  const handleDiscardSavedWorkspace = async () => {
+    await clearWorkspace();
+    setSavedWorkspacePrompt(null);
+  };
+
+  const handleManualSave = async () => {
+    if (!masterData || masterData.length === 0) return;
+    setIsSavingWorkspace(true);
+    await saveWorkspace({ masterData, fileMeta, stagedData });
+    setIsSavingWorkspace(false);
+    setSaveToast('✓ Session saved');
+    setTimeout(() => setSaveToast(''), 3000);
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -225,8 +284,48 @@ function App() {
       <main className="main-content">
         <ErrorBoundary>
         {!masterData ? (
-          <div className="card" style={{ maxWidth: '850px', margin: '3rem auto' }}>
-            <FileUpload onDataParsed={handleDataParsed} />
+          <div style={{ maxWidth: '850px', margin: '3rem auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {savedWorkspacePrompt && (
+              <div className="card" style={{
+                padding: '1.25rem 1.5rem',
+                background: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid #3b82f6',
+                borderRadius: '12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>💾</span> Restore Previous Workspace Session?
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Found <strong>{savedWorkspacePrompt.recordCount?.toLocaleString() || savedWorkspacePrompt.masterData?.length || 0}</strong> records from <em>"{savedWorkspacePrompt.fileName}"</em> (Auto-saved on {new Date(savedWorkspacePrompt.savedAt).toLocaleDateString()} at {new Date(savedWorkspacePrompt.savedAt).toLocaleTimeString()}).
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.65rem' }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.85rem', padding: '0.45rem 1rem' }}
+                    onClick={handleRestoreWorkspace}
+                  >
+                    ⚡ Restore Session
+                  </button>
+                  <button
+                    className="btn btn-outline"
+                    style={{ fontSize: '0.85rem', padding: '0.45rem 1rem', color: '#ef4444', borderColor: '#ef4444' }}
+                    onClick={handleDiscardSavedWorkspace}
+                  >
+                    ✕ Discard
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="card">
+              <FileUpload onDataParsed={handleDataParsed} />
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -242,6 +341,34 @@ function App() {
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Total Records: </span>
                   <strong style={{ color: '#3b82f6', fontWeight: 800 }}>{masterData.length.toLocaleString()} rows</strong>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <button
+                    onClick={handleManualSave}
+                    disabled={isSavingWorkspace}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-card)',
+                      color: 'var(--text-main)',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                    title="Manually save current workspace and staged records to browser IndexedDB"
+                  >
+                    <span>💾</span> {isSavingWorkspace ? 'Saving...' : 'Save Session'}
+                  </button>
+                  {saveToast && (
+                    <span style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700 }}>
+                      {saveToast}
+                    </span>
+                  )}
                 </div>
 
                 {fileMeta && fileMeta.sheetNames.length > 1 && (

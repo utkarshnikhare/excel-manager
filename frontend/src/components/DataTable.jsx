@@ -1,18 +1,34 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import DeedDetailModal from './DeedDetailModal';
+import PropertyTimelineModal from './PropertyTimelineModal';
 import { formatINR } from '../utils/propertyParser';
+import { renderHighlightedText } from '../utils/highlightHelper';
 
-const DataTable = ({ data, onDeleteRow }) => {
+export { renderHighlightedText };
+
+const DataTable = ({ data, onDeleteRow, searchTokens = [] }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [quickFilter, setQuickFilter] = useState('');
   const [selectedDeed, setSelectedDeed] = useState(null);
+  const [selectedTimelineDeed, setSelectedTimelineDeed] = useState(null);
   const [hiddenCols, setHiddenCols] = useState(new Set([
     'internaldocumentnumber', 'micrno', 'bank_type', 'party_code', 'status', 'dateofexecution', 'source_sheet'
   ]));
   const [showColPicker, setShowColPicker] = useState(false);
   const [displayMode, setDisplayMode] = useState('table'); // 'table' or 'cards'
+
+  const activeHighlightTokens = useMemo(() => {
+    const tokens = [];
+    if (searchTokens && Array.isArray(searchTokens)) {
+      tokens.push(...searchTokens);
+    }
+    if (quickFilter.trim()) {
+      tokens.push(...quickFilter.trim().split(/\s+/));
+    }
+    return tokens.filter(t => t.length >= 2);
+  }, [searchTokens, quickFilter]);
 
   // Safe data array ensuring zero hook skips or crashes
   const safeData = useMemo(() => Array.isArray(data) ? data : [], [data]);
@@ -234,19 +250,18 @@ const DataTable = ({ data, onDeleteRow }) => {
       );
     }
 
-    // Long description truncation
+    // Long description truncation with safe in-cell highlighting
     if (col === 'propertydescription' || col === 'sellerparty' || col === 'purchaserparty') {
       const s = String(val);
-      if (s.length > 50) {
-        return (
-          <span title={s} style={{ cursor: 'pointer' }} onClick={() => setSelectedDeed(row)}>
-            {s.slice(0, 50)}...
-          </span>
-        );
-      }
+      const textToDisplay = s.length > 55 ? `${s.slice(0, 55)}...` : s;
+      return (
+        <span title={s} style={{ cursor: 'pointer' }} onClick={() => setSelectedDeed(row)}>
+          {renderHighlightedText(textToDisplay, activeHighlightTokens)}
+        </span>
+      );
     }
 
-    return String(val);
+    return renderHighlightedText(val, activeHighlightTokens);
   };
 
   // If no records at all
@@ -619,14 +634,32 @@ const DataTable = ({ data, onDeleteRow }) => {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
-                  <button
-                    onClick={() => setSelectedDeed(row)}
-                    className="btn btn-outline"
-                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem', borderRadius: '4px' }}
-                  >
-                    📄 View Index-II
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <button
+                      onClick={() => setSelectedDeed(row)}
+                      className="btn btn-outline"
+                      style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem', borderRadius: '4px' }}
+                    >
+                      📄 View Index-II
+                    </button>
+                    {isPropertyData && (row.flat_no || row.society) && (
+                      <button
+                        onClick={() => setSelectedTimelineDeed(row)}
+                        className="btn btn-outline"
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '4px',
+                          borderColor: '#3b82f6',
+                          color: '#2563eb'
+                        }}
+                        title="View chronological ownership and title history for this unit"
+                      >
+                        📜 Timeline
+                      </button>
+                    )}
+                  </div>
                   {onDeleteRow && (
                     <button
                       onClick={() => onDeleteRow(row)}
@@ -692,7 +725,7 @@ const DataTable = ({ data, onDeleteRow }) => {
                       <td style={{ padding: '0.5rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center' }}>
                         {rowNumber}
                       </td>
-                      <td style={{ padding: '0.5rem 0.8rem', textAlign: 'center' }}>
+                      <td style={{ padding: '0.5rem 0.8rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <button
                           onClick={() => setSelectedDeed(row)}
                           className="btn btn-outline"
@@ -705,6 +738,24 @@ const DataTable = ({ data, onDeleteRow }) => {
                         >
                           📄 View
                         </button>
+                        {isPropertyData && (row.flat_no || row.society) && (
+                          <button
+                            onClick={() => setSelectedTimelineDeed(row)}
+                            className="btn btn-outline"
+                            style={{
+                              padding: '0.2rem 0.5rem',
+                              fontSize: '0.75rem',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap',
+                              marginLeft: '0.35rem',
+                              borderColor: '#3b82f6',
+                              color: '#2563eb'
+                            }}
+                            title="View chronological ownership and title history for this unit"
+                          >
+                            📜 Timeline
+                          </button>
+                        )}
                       </td>
                       {hasMatchTier && (
                         <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -850,6 +901,15 @@ const DataTable = ({ data, onDeleteRow }) => {
         <DeedDetailModal
           deed={selectedDeed}
           onClose={() => setSelectedDeed(null)}
+        />
+      )}
+
+      {/* Property Transaction Timeline & Chain-of-Title Modal */}
+      {selectedTimelineDeed && (
+        <PropertyTimelineModal
+          deed={selectedTimelineDeed}
+          dataset={safeData}
+          onClose={() => setSelectedTimelineDeed(null)}
         />
       )}
     </div>
