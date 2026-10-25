@@ -104,6 +104,14 @@ export async function parsePdfBuffer(arrayBuffer, fileName) {
 
     // Scanned PDF detection: if embedded text layer is empty or unusable, flag clearly for OCR
     if (!hasSufficientText) {
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        try {
+          const { ocrScannedPdf } = await import('./ocrEngine.js');
+          return await ocrScannedPdf(pdf, fileName, null);
+        } catch (ocrErr) {
+          console.warn('Scanned PDF OCR attempt failed, using fallback advisory:', ocrErr);
+        }
+      }
       return [{
         docno: 'SCANNED_DOC',
         registrationdate: '—',

@@ -14,6 +14,21 @@ export async function parseImageFile(file) {
         let hasNativeOcr = false;
 
         // Modern Browser Shape Detection API (Native In-Browser OCR)
+        let ocrEngineUsed = 'None';
+        // 1. Primary: Local Tesseract.js (Offline WASM) for genuine Marathi & English OCR
+        try {
+          const { recognizeImage } = await import('./ocrEngine.js');
+          const res = await recognizeImage(file, { languages: 'mar+eng' });
+          if (res.success && res.text && res.text.trim().length > 0) {
+            detectedText = res.text.trim();
+            hasNativeOcr = true;
+            ocrEngineUsed = 'Tesseract.js (mar+eng WASM)';
+          }
+        } catch (tessErr) {
+          console.warn('Local Tesseract image OCR fallback:', tessErr);
+        }
+
+        // 2. Secondary Fallback: Browser Shape Detection API if available
         if ('TextDetector' in window) {
           try {
             // @ts-ignore
@@ -41,7 +56,8 @@ export async function parseImageFile(file) {
           extracted_ocr_text: detectedText || (hasNativeOcr ? 'No readable text recognized in image.' : 'Native browser OCR unavailable. File metadata recorded.'),
           source_file: file.name,
           source_sheet: 'Image_OCR',
-          _ocrStatus: hasNativeOcr ? 'NATIVE_OCR_SUCCESS' : 'OCR_UNAVAILABLE',
+          _ocrEngine: ocrEngineUsed,
+          _ocrStatus: hasNativeOcr ? (ocrEngineUsed.includes('Tesseract') ? 'OFFLINE_WASM_OCR_SUCCESS' : 'NATIVE_OCR_SUCCESS') : 'OCR_UNAVAILABLE',
           _extractionStatus: detectedText ? 'SUCCESS' : 'INCOMPLETE',
           _isWarning: !detectedText
         };

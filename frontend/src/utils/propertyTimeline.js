@@ -21,6 +21,14 @@ export function extractWingIdentifier(record) {
   return match ? match[1].toLowerCase().trim() : '';
 }
 
+// Extract Survey / Gat / CTS identifier for cross-verification
+export function extractSurveyIdentifier(record) {
+  if (!record) return '';
+  const desc = String(record.propertydescription || record.PropertyDescription || '');
+  const match = desc.match(/(?:सर्व्हे|सर्वे|survey|s\.?\s*no|गट|gat|cts|सी\.?\s*टी\.?\s*एस)(?:\s*(?:no\.?|नं\.?|क्रमांक|number))?\s*[:\-]?\s*([0-9\/\-]+)/i);
+  return match ? match[1].trim() : '';
+}
+
 // Get contextual party role labels according to deed type
 export function getPartyRoleLabels(docName) {
   const d = String(docName || '').toLowerCase();
@@ -89,6 +97,7 @@ export function findMatchingPropertyRecords(arg1, arg2) {
   }
 
   const targetWing = extractWingIdentifier(targetRecord);
+  const targetSurvey = extractSurveyIdentifier(targetRecord);
 
   return dataset.filter(row => {
     // Flat/Unit must match
@@ -99,10 +108,18 @@ export function findMatchingPropertyRecords(arg1, arg2) {
     const rowWing = extractWingIdentifier(row);
     if (targetWing && rowWing && targetWing !== rowWing) return false;
 
-    // Society must match or be closely related
+    // Society matching
     const rowSociety = String(row.society || '').toLowerCase().trim();
     if (targetSociety && rowSociety) {
-      if (rowSociety === targetSociety) return true;
+      if (rowSociety === targetSociety) {
+        // If societies match, also verify conflicting surveys don't belong to completely different properties
+        const rowSurvey = extractSurveyIdentifier(row);
+        if (targetSurvey && rowSurvey && targetSurvey !== rowSurvey) {
+          // If survey numbers are completely different (e.g. 42 vs 99), keep separate
+          return false;
+        }
+        return true;
+      }
       if (rowSociety.includes(targetSociety) || targetSociety.includes(rowSociety)) return true;
     }
 
@@ -157,16 +174,34 @@ export function compilePropertyTimeline(arg1, arg2) {
     };
   }
 
-  // Deduplicate identical duplicate deeds (e.g. from multi-file re-uploads)
-  const seenDeeds = new Set();
-  const dedupedRecords = [];
+  // Canonical cross-file duplicate deed detection while preserving all originating source references
+  const seenDeeds = new Map();
   for (const r of records) {
-    const key = `${r.docno || ''}_${r.registrationdate || ''}_${r.source_file || ''}`;
-    if (!seenDeeds.has(key)) {
-      seenDeeds.add(key);
-      dedupedRecords.push(r);
+    const normDoc = String(r.docno || '').trim().toLowerCase();
+    const normDate = String(r.registrationdate || '').trim();
+    const normSro = String(r.sroname || '').trim().toLowerCase();
+    // Canonical cross-file deed key (independent of filename)
+    const canonicalKey = normDoc ? `${normDoc}_${normDate}_${normSro}` : null;
+
+    if (canonicalKey && seenDeeds.has(canonicalKey)) {
+      const existing = seenDeeds.get(canonicalKey);
+      const incomingSource = r.source_file || 'Spreadsheet';
+      if (!existing._sourceFiles.includes(incomingSource)) {
+        existing._sourceFiles.push(incomingSource);
+      }
+    } else {
+      const copy = {
+        ...r,
+        _sourceFiles: r.source_file ? [r.source_file] : []
+      };
+      if (canonicalKey) {
+        seenDeeds.set(canonicalKey, copy);
+      } else {
+        seenDeeds.set(`anon_${Math.random()}`, copy);
+      }
     }
   }
+  const dedupedRecords = Array.from(seenDeeds.values());
 
   // Sort chronologically (oldest deed first)
   const sorted = [...dedupedRecords].sort((a, b) => {
@@ -196,6 +231,16 @@ export function compilePropertyTimeline(arg1, arg2) {
     const docName = String(deed.docname || 'Index-II Registration').trim();
     const date = deed.registrationdate || '—';
 
+    // Flag missing or ambiguous registration dates
+    const isDateMissing = !date || date === '—' || !/\d{4}/.test(date);
+    if (isDateMissing) {
+      gaps.push({
+        deedIndex: index + 1,
+        docno: deed.docno,
+        note: `Registration Date Missing: Deed #${deed.docno} has no recorded registration date. Chronological sequence is estimated.`
+      });
+    }
+
     const roleInfo = getPartyRoleLabels(docName);
 
     // Check for ownership continuity gaps between resale transactions
@@ -218,11 +263,15 @@ export function compilePropertyTimeline(arg1, arg2) {
       previousPurchaser = buyer;
     }
 
+    const sourceFileList = deed._sourceFiles && deed._sourceFiles.length > 0 ? deed._sourceFiles : (deed.source_file ? [deed.source_file] : []);
+    const sourceFileDisplay = sourceFileList.join(', ') || '—';
+
     return {
       stepIndex: index + 1,
       docno: deed.docno || '—',
       docNo: deed.docno || '—',
       registrationdate: date,
+      isDateMissing,
       docname: docName,
       sellerparty: seller,
       seller,
@@ -238,7 +287,9 @@ export function compilePropertyTimeline(arg1, arg2) {
       formattedStampDuty: formatINR(stamp),
       sroname: deed.sroname || '—',
       propertydescription: deed.propertydescription || '—',
-      source_file: deed.source_file || '—',
+      source_file: sourceFileDisplay,
+      source_files: sourceFileList,
+      isCrossFileDuplicate: sourceFileList.length > 1,
       source_sheet: deed.source_sheet || '—',
       isChainGap,
       isContinuityGap: isChainGap,
