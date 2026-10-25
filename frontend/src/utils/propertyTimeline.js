@@ -72,6 +72,38 @@ export function getPartyRoleLabels(docName) {
       isConveyance: false
     };
   }
+  if (/वाटप|पार्टिशन|partition/i.test(d)) {
+    return {
+      role1Label: 'Co-Sharer / Coparcener (सहहिस्सेदार)',
+      role2Label: 'Allottee / Coparcener (वाटप घेणारा)',
+      verb: 'PARTITIONED WITH',
+      isConveyance: false
+    };
+  }
+  if (/दुरुस्ती|rectification|correction/i.test(d)) {
+    return {
+      role1Label: 'Executing Party (दुरुस्ती करून देणारा)',
+      role2Label: 'Claimant Party (दुरुस्ती मिळवणारा)',
+      verb: 'RECTIFIED WITH',
+      isConveyance: false
+    };
+  }
+  if (/अदलाबदल|exchange/i.test(d)) {
+    return {
+      role1Label: 'First Party (प्रथम पक्षकार)',
+      role2Label: 'Second Party (द्वितीय पक्षकार)',
+      verb: 'EXCHANGED WITH',
+      isConveyance: false
+    };
+  }
+  if (/विकास\s*करार|विकसन|development/i.test(d)) {
+    return {
+      role1Label: 'Landowner / Owner (जमीन मालक)',
+      role2Label: 'Developer / Builder (विकासक)',
+      verb: 'ASSIGNED RIGHTS TO',
+      isConveyance: false
+    };
+  }
   return {
     role1Label: 'Transferor / Seller (देणारा पक्षकार)',
     role2Label: 'Transferee / Purchaser (घेणारा पक्षकार)',

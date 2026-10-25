@@ -78,7 +78,7 @@ export function parseIgrIndex2Text(fullText, fileName) {
 // In-Browser PDF Text Extractor (100% Client-Side & Zero-CDN Offline Privacy)
 export async function parsePdfBuffer(arrayBuffer, fileName) {
   try {
-    const pdfjsLib = await import('pdfjs-dist/build/pdf');
+    const pdfjsLib = await import('pdfjs-dist/build/pdf.js');
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
       // Local self-hosted worker: prevents CDN leakage and enables true offline capability
       const base = typeof window !== 'undefined' && window.location 

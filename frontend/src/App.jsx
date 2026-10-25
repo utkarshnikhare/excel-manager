@@ -71,10 +71,15 @@ function App() {
   const handleManualSave = async () => {
     if (!masterData || masterData.length === 0) return;
     setIsSavingWorkspace(true);
-    await saveWorkspace({ masterData, fileMeta, stagedData });
+    const success = await saveWorkspace({ masterData, fileMeta, stagedData });
     setIsSavingWorkspace(false);
-    setSaveToast('✓ Session saved');
-    setTimeout(() => setSaveToast(''), 3000);
+    if (success) {
+      setSaveToast('✓ Session saved');
+      setTimeout(() => setSaveToast(''), 3000);
+    } else {
+      setSaveToast('⚠️ Storage restricted / quota full');
+      setTimeout(() => setSaveToast(''), 4000);
+    }
   };
 
   useEffect(() => {
@@ -190,8 +195,14 @@ function App() {
   // Neutralizes formula triggers (=, +, -, @, \t, \r) for non-numeric strings to safeguard users opening files in Excel
   const sanitizeExportValue = (val) => {
     if (val === null || val === undefined) return '';
+    if (typeof val === 'number') return val;
     const str = String(val);
-    if (/^[=+\-@\t\r]/.test(str) && isNaN(Number(str))) {
+    if (str === '') return '';
+    if (!isNaN(Number(str)) && !/^\s*0[0-9]+/.test(str)) {
+      return str;
+    }
+    const trimmed = str.replace(/^[\s\uFEFF\xA0]+/, '');
+    if (/^[=+\-@\t\r\n|%]/.test(trimmed)) {
       return `'${str}`;
     }
     return str;
@@ -212,7 +223,8 @@ function App() {
         for (let i = 0; i < keys.length; i++) {
           const k = keys[i];
           if (!k.startsWith('_')) {
-            cleanObj[k] = sanitizeExportValue(row[k]);
+            const safeKey = sanitizeExportValue(k);
+            cleanObj[safeKey] = sanitizeExportValue(row[k]);
           }
         }
         return cleanObj;
@@ -243,8 +255,9 @@ function App() {
     }
     
     // Pure high-speed CSV generator with UTF-8 BOM and formula sanitization
-    const headers = Object.keys(exportData[0]).filter(k => !k.startsWith('_'));
-    const rows = [headers.join(',')];
+    const rawHeaders = Object.keys(exportData[0]).filter(k => !k.startsWith('_'));
+    const rows = [rawHeaders.map(h => `"${String(sanitizeExportValue(h)).replace(/"/g, '""')}"`).join(',')];
+    const headers = rawHeaders;
     for (let i = 0; i < exportData.length; i++) {
       const row = exportData[i];
       const line = headers.map(h => {
