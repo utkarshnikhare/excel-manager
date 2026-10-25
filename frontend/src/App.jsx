@@ -71,14 +71,20 @@ function App() {
   const handleManualSave = async () => {
     if (!masterData || masterData.length === 0) return;
     setIsSavingWorkspace(true);
-    const success = await saveWorkspace({ masterData, fileMeta, stagedData });
-    setIsSavingWorkspace(false);
-    if (success) {
-      setSaveToast('✓ Session saved');
-      setTimeout(() => setSaveToast(''), 3000);
-    } else {
+    try {
+      const success = await saveWorkspace({ masterData, fileMeta, stagedData });
+      if (success) {
+        setSaveToast('✓ Session saved');
+        setTimeout(() => setSaveToast(''), 3000);
+      } else {
+        setSaveToast('⚠️ Storage restricted / quota full');
+        setTimeout(() => setSaveToast(''), 4000);
+      }
+    } catch {
       setSaveToast('⚠️ Storage restricted / quota full');
       setTimeout(() => setSaveToast(''), 4000);
+    } finally {
+      setIsSavingWorkspace(false);
     }
   };
 
@@ -198,9 +204,17 @@ function App() {
     if (typeof val === 'number') return val;
     const str = String(val);
     if (str === '') return '';
-    if (!isNaN(Number(str)) && !/^\s*0[0-9]+/.test(str)) {
+    
+    // If it's a signed or plain decimal/integer, convert to genuine numeric (prevents string '-' formula trigger in Excel)
+    if (/^[+\-]?\d+(\.\d+)?$/.test(str) && !/^[+\-]?0\d+/.test(str)) {
+      return Number(str);
+    }
+
+    // Preserve leading-zero numeric strings as plain text strings (e.g. "00123", "09820011223")
+    if (/^\s*0\d+/.test(str) && !isNaN(Number(str))) {
       return str;
     }
+
     const trimmed = str.replace(/^[\s\uFEFF\xA0]+/, '');
     if (/^[=+\-@\t\r\n|%]/.test(trimmed)) {
       return `'${str}`;

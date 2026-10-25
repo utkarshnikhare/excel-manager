@@ -34,7 +34,7 @@ function openDatabase() {
 export async function saveWorkspace(workspaceData) {
   try {
     const db = await openDatabase();
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       
@@ -51,7 +51,9 @@ export async function saveWorkspace(workspaceData) {
 
       putRequest.onsuccess = () => resolve(true);
       putRequest.onerror = (e) => reject(new Error(`Failed to save workspace: ${e.target.error?.message}`));
+      tx.onerror = (e) => reject(new Error(`Transaction error: ${e.target.error?.message}`));
     });
+    return true;
   } catch (err) {
     console.warn('Workspace auto-save error (IndexedDB):', err);
     return false;
@@ -61,7 +63,7 @@ export async function saveWorkspace(workspaceData) {
 export async function loadWorkspace() {
   try {
     const db = await openDatabase();
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const getRequest = store.get(KEY_CURRENT);
@@ -70,6 +72,7 @@ export async function loadWorkspace() {
         resolve(getRequest.result || null);
       };
       getRequest.onerror = (e) => reject(new Error(`Failed to load workspace: ${e.target.error?.message}`));
+      tx.onerror = (e) => reject(new Error(`Transaction error: ${e.target.error?.message}`));
     });
   } catch (err) {
     console.warn('Workspace restore error (IndexedDB):', err);
@@ -80,13 +83,14 @@ export async function loadWorkspace() {
 export async function clearWorkspace() {
   try {
     const db = await openDatabase();
-    return new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       const deleteRequest = store.delete(KEY_CURRENT);
 
       deleteRequest.onsuccess = () => resolve(true);
       deleteRequest.onerror = (e) => reject(new Error(`Failed to clear workspace: ${e.target.error?.message}`));
+      tx.onerror = (e) => reject(new Error(`Transaction error: ${e.target.error?.message}`));
     });
   } catch (err) {
     console.warn('Workspace clear error (IndexedDB):', err);

