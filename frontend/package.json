@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node test_suite.js && node test_full_app_audit.js && node test_hardening_audit.js && node test_master_implementation.js && node test_adversarial_regression.js && node test_ocr_evaluation.js && node test_search_evaluation.js",
+    "test": "node test_suite.js && node test_full_app_audit.js && node test_hardening_audit.js && node test_master_implementation.js && node test_adversarial_regression.js && node test_ocr_evaluation.js && node test_search_evaluation.js && node test_accessibility_regression.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",

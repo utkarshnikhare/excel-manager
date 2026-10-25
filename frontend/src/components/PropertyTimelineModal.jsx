@@ -1,15 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useRef } from 'react';
 import { compilePropertyTimeline, findMatchingPropertyRecords } from '../utils/propertyTimeline';
 import { formatINR } from '../utils/propertyParser';
+import { useModalFocus } from '../utils/useModalFocus';
 
 const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  const modalRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useModalFocus({
+    modalRef,
+    onClose,
+    initialFocusRef: closeButtonRef
+  });
 
   if (!deed) return null;
 
@@ -35,7 +37,8 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
       backdropFilter: 'blur(3px)',
       padding: '1rem'
     }}>
-      <div role="dialog" aria-modal="true" aria-label="Property Chain-of-Title Timeline"
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Property Chain-of-Title Timeline"
+        tabIndex={-1}
         className="modal-content print-timeline-container" 
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -85,7 +88,10 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
               📄 Print / Save PDF
             </button>
             <button
+              ref={closeButtonRef}
               onClick={onClose}
+              aria-label="Close Timeline Modal"
+              title="Close Modal (Esc)"
               style={{
                 background: 'var(--bg-main, #f1f5f9)',
                 border: '1px solid var(--border-color, #cbd5e1)',
@@ -309,6 +315,26 @@ const PropertyTimelineModal = ({ deed, dataset, onClose }) => {
           <div style={{ marginTop: '0.35rem', fontSize: '0.7rem', textAlign: 'right' }}>
             Report generated on: {new Date().toLocaleString()} (100% Client-Side Local Verification)
           </div>
+        </div>
+
+        {/* Modal Action Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem', borderTop: '1px solid var(--border-color, #e2e8f0)', paddingTop: '0.75rem' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '0.45rem 1.25rem',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color, #cbd5e1)',
+              background: 'var(--bg-main, #f1f5f9)',
+              color: 'var(--text-main, #0f172a)',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              cursor: 'pointer'
+            }}
+          >
+            Close Timeline
+          </button>
         </div>
       </div>
     </div>

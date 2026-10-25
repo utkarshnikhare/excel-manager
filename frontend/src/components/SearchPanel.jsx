@@ -60,6 +60,7 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
   const [pendingResults, setPendingResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [tierFilter, setTierFilter] = useState('ALL');
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
   const debounceTimerRef = useRef(null);
 
   // Dynamic lists from dataset for side-by-side dropdowns
@@ -292,9 +293,48 @@ const SearchPanel = ({ masterData, _stagedData, onProcessResults, onDone, extern
     return pendingResults.filter(r => r._matchTier === tierFilter);
   }, [pendingResults, tierFilter]);
 
+  // Accessible search announcement synchronization (avoids excessive announcements while user is actively typing)
+  useEffect(() => {
+    if (!hasAnyFilter) {
+      setLiveAnnouncement('');
+      return;
+    }
+    if (isSearching) {
+      return;
+    }
+    if (pendingResults !== null) {
+      const count = displayedResults.length;
+      if (count === 0) {
+        setLiveAnnouncement('No matching records found.');
+      } else {
+        setLiveAnnouncement(`${count} matching record${count === 1 ? '' : 's'} found.`);
+      }
+    }
+  }, [hasAnyFilter, isSearching, pendingResults, displayedResults]);
+
   return (
     <div className="card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       
+      {/* Screen Reader Accessible Live Status Region */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          padding: 0,
+          margin: '-1px',
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0
+        }}
+      >
+        {liveAnnouncement}
+      </div>
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>

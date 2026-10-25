@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { formatINR } from '../utils/propertyParser';
+import { useModalFocus } from '../utils/useModalFocus';
 
 const DeedDetailModal = ({ deed, onClose }) => {
   const [showRawText, setShowRawText] = useState(false);
+  const modalRef = useRef(null);
+  const closeButtonRef = useRef(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  useModalFocus({
+    modalRef,
+    onClose,
+    initialFocusRef: closeButtonRef
+  });
 
   if (!deed) return null;
 
@@ -36,7 +37,7 @@ const DeedDetailModal = ({ deed, onClose }) => {
       zIndex: 9999,
       padding: '1rem'
     }} onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Document Deed Details" style={{
+      <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Document Deed Details" tabIndex={-1} style={{ outline: 'none',
         background: 'var(--bg-card)',
         color: 'var(--text-main)',
         borderRadius: '16px',
@@ -111,7 +112,10 @@ const DeedDetailModal = ({ deed, onClose }) => {
           </div>
 
           <button
+            ref={closeButtonRef}
             onClick={onClose}
+            aria-label="Close Modal"
+            title="Close Modal (Esc)"
             style={{
               background: 'transparent',
               border: 'none',
