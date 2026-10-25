@@ -171,7 +171,14 @@ async function testEngine(config, targetUrl) {
     const keywordInput = await page.$('input[placeholder*="Type any name"]');
     if (keywordInput) {
       await keywordInput.fill('Sharma');
-      await page.waitForTimeout(600); // Debounce settle
+      try {
+        await page.waitForFunction(() => {
+          const el = document.querySelector('[role="status"][aria-live="polite"]');
+          return el && el.textContent.includes('matching record');
+        }, { timeout: 3000 });
+      } catch {
+        // Fall back if timeout
+      }
 
       const enRows = await page.evaluate(() => document.querySelectorAll('tbody tr').length);
       recordCheck('SEARCH_EN', enRows > 0, `English query "Sharma" matched ${enRows} record(s)`);
