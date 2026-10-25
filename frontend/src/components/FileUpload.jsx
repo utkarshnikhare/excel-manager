@@ -112,6 +112,7 @@ const FileUpload = ({ onDataParsed }) => {
       let combinedData = [];
       const seenRecords = new Set();
       const sheetNames = [];
+      const fileSummary = [];
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -131,39 +132,55 @@ const FileUpload = ({ onDataParsed }) => {
         const buffer = await file.arrayBuffer();
 
         // -------------------------------------------------------------
-        // OPTION 4 SOLUTION: Ingest PDFs (Index-II government deeds & general PDFs)
+        // Ingest PDFs (Index-II government deeds & general PDFs)
         // -------------------------------------------------------------
         if (lowerName.endsWith('.pdf')) {
           try {
             const pdfRows = await parsePdfBuffer(buffer, file.name);
+            const isWarn = pdfRows.some(r => r._isWarning);
             for (let r = 0; r < pdfRows.length; r++) {
               combinedData.push(pdfRows[r]);
             }
             if (!sheetNames.includes('PDF_Deeds')) sheetNames.push('PDF_Deeds');
+            fileSummary.push({
+              name: file.name,
+              status: isWarn ? 'WARNING' : 'SUCCESS',
+              count: pdfRows.length,
+              note: isWarn ? 'Scanned PDF (OCR needed)' : `${pdfRows.length} deed(s) extracted`
+            });
           } catch (pdfErr) {
             console.warn(`PDF parse error in ${file.name}:`, pdfErr);
+            fileSummary.push({ name: file.name, status: 'FAILED', count: 0, note: pdfErr.message });
           }
           continue;
         }
 
         // -------------------------------------------------------------
-        // OPTION 4 SOLUTION: Ingest Images (Scanned deeds, photos, receipts)
+        // Ingest Images (Scanned deeds, photos, receipts)
         // -------------------------------------------------------------
         if (/\.(png|jpe?g|webp|bmp)$/i.test(lowerName)) {
           try {
             const imgRows = await parseImageFile(file);
+            const isWarn = imgRows.some(r => r._isWarning);
             for (let r = 0; r < imgRows.length; r++) {
               combinedData.push(imgRows[r]);
             }
             if (!sheetNames.includes('Image_OCR')) sheetNames.push('Image_OCR');
+            fileSummary.push({
+              name: file.name,
+              status: isWarn ? 'WARNING' : 'SUCCESS',
+              count: imgRows.length,
+              note: isWarn ? 'Metadata recorded (OCR unavailable)' : 'Image OCR processed'
+            });
           } catch (imgErr) {
             console.warn(`Image OCR error in ${file.name}:`, imgErr);
+            fileSummary.push({ name: file.name, status: 'FAILED', count: 0, note: imgErr.message });
           }
           continue;
         }
 
         // -------------------------------------------------------------
-        // OPTION 5 SOLUTION: Excel & Password-Protected Decryption Interceptor
+        // Ingest Excel & Password-Protected Decryption Interceptor
         // -------------------------------------------------------------
         let workbook = null;
         try {
@@ -194,24 +211,31 @@ const FileUpload = ({ onDataParsed }) => {
           }
         }
 
-        if (!workbook) continue;
+        if (!workbook) {
+          fileSummary.push({ name: file.name, status: 'FAILED', count: 0, note: 'Could not decrypt or read workbook' });
+          continue;
+        }
 
         const currentSheets = workbook?.SheetNames || [];
-        if (currentSheets.length === 0) continue;
+        if (currentSheets.length === 0) {
+          fileSummary.push({ name: file.name, status: 'FAILED', count: 0, note: 'No sheets found' });
+          continue;
+        }
 
+        let fileRowCount = 0;
         for (let s = 0; s < currentSheets.length; s++) {
           const sheetName = currentSheets[s];
           const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
           for (let r = 0; r < rawRows.length; r++) {
             const enriched = normalizeRowData(rawRows[r], file.name, sheetName, r);
-            // High-speed deduplication key (no JSON.stringify overhead, scales to 100,000+ rows)
             const dedupeKey = enriched.docno 
               ? `${file.name}_${enriched.srocode || ''}_${enriched.docno}_${enriched.registrationdate || ''}` 
               : `${file.name}_s${s}_r${r}`;
             if (!seenRecords.has(dedupeKey)) {
               seenRecords.add(dedupeKey);
               combinedData.push(enriched);
+              fileRowCount++;
             }
           }
 
@@ -219,6 +243,13 @@ const FileUpload = ({ onDataParsed }) => {
             sheetNames.push(sheetName);
           }
         }
+
+        fileSummary.push({
+          name: file.name,
+          status: 'SUCCESS',
+          count: fileRowCount,
+          note: `${currentSheets.length} sheet(s)`
+        });
       }
 
       if (combinedData.length === 0) {
@@ -234,7 +265,14 @@ const FileUpload = ({ onDataParsed }) => {
         workbook: null,
         sheetNames: sheetNames.length > 0 ? sheetNames : ['Consolidated_Records'],
         activeSheet: sheetNames[0] || 'Consolidated_Records',
-        fileName: files.length === 1 ? files[0].name : `${files.length} Merged Spreadsheets (${combinedData.length.toLocaleString()} rows)`
+        fileName: files.length === 1 ? files[0].name : `${files.length} Merged Spreadsheets (${combinedData.length.toLocaleString()} rows)`,
+        importSummary: {
+          total: files.length,
+          success: fileSummary.filter(f => f.status === 'SUCCESS').length,
+          warning: fileSummary.filter(f => f.status === 'WARNING').length,
+          failed: fileSummary.filter(f => f.status === 'FAILED').length,
+          files: fileSummary
+        }
       });
 
     } catch (err) {

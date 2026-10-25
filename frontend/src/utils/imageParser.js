@@ -11,8 +11,9 @@ export async function parseImageFile(file) {
         const width = img.width;
         const height = img.height;
         let detectedText = '';
+        let hasNativeOcr = false;
 
-        // Modern Browser Shape Detection API (Native Fast In-Browser OCR)
+        // Modern Browser Shape Detection API (Native In-Browser OCR)
         if ('TextDetector' in window) {
           try {
             // @ts-ignore
@@ -20,9 +21,10 @@ export async function parseImageFile(file) {
             const detections = await detector.detect(img);
             if (detections && detections.length > 0) {
               detectedText = detections.map(d => d.rawValue).join(' ');
+              hasNativeOcr = true;
             }
           } catch (err) {
-            console.warn('Native TextDetector unavailable, falling back:', err);
+            console.warn('Native TextDetector failed on image:', err);
           }
         }
 
@@ -36,23 +38,29 @@ export async function parseImageFile(file) {
           dimensions: `${width} x ${height} px`,
           file_size: `${fileSizeKb} KB`,
           capture_date: dateStr,
-          extracted_ocr_text: detectedText || `Scanned Image / Receipt: ${file.name}`,
+          extracted_ocr_text: detectedText || (hasNativeOcr ? 'No readable text recognized in image.' : 'Native browser OCR unavailable. File metadata recorded.'),
           source_file: file.name,
-          source_sheet: 'Image_OCR'
+          source_sheet: 'Image_OCR',
+          _ocrStatus: hasNativeOcr ? 'NATIVE_OCR_SUCCESS' : 'OCR_UNAVAILABLE',
+          _extractionStatus: detectedText ? 'SUCCESS' : 'INCOMPLETE',
+          _isWarning: !detectedText
         };
 
         // If detected text looks like a real-estate deed or receipt, extract fields
-        if (detectedText.includes('दस्त') || detectedText.includes('मोबदला') || detectedText.includes('₹')) {
+        if (detectedText && (detectedText.includes('दस्त') || detectedText.includes('मोबदला') || detectedText.includes('₹'))) {
           const numMatch = detectedText.match(/(\d+)/);
           if (numMatch) row.docno = numMatch[1];
           const valMatch = detectedText.match(/(?:₹|Rs\.?)\s*([\d,]+)/);
           if (valMatch) row.consideration_amt = parseFloat(valMatch[1].replace(/,/g, ''));
         }
 
-        // Intelligent fallback: Extract document number or year from filename if OCR is unavailable in current browser
+        // Traceable filename metadata fallback if OCR was not available
         if (!row.docno) {
           const docMatch = file.name.match(/(?:doc|deed|no|rec)?[-_\s]?(\d{4,6})/i);
-          if (docMatch) row.docno = docMatch[1];
+          if (docMatch) {
+            row.docno = docMatch[1];
+            row._provenance = 'Inferred from filename (unverified)';
+          }
         }
 
         resolve([enrichRow(row)]);
@@ -62,9 +70,12 @@ export async function parseImageFile(file) {
         resolve([{
           document_title: file.name,
           file_size: `${Math.round(file.size / 1024)} KB`,
-          extracted_ocr_text: `Image file: ${file.name}`,
+          extracted_ocr_text: `Corrupt or unreadable image file: ${file.name}`,
           source_file: file.name,
-          source_sheet: 'Image_OCR'
+          source_sheet: 'Image_OCR',
+          _ocrStatus: 'FAILED',
+          _extractionStatus: 'FAILED',
+          _isWarning: true
         }]);
       };
 

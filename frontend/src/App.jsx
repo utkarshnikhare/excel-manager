@@ -127,25 +127,39 @@ function App() {
     return `Export_${baseName}_${dateStr}.${extension}`;
   };
 
+  // Prevent Spreadsheet Formula Injection (CWE-1236):
+  // Neutralizes formula triggers (=, +, -, @, \t, \r) for non-numeric strings to safeguard users opening files in Excel
+  const sanitizeExportValue = (val) => {
+    if (val === null || val === undefined) return '';
+    const str = String(val);
+    if (/^[=+\-@\t\r]/.test(str) && isNaN(Number(str))) {
+      return `'${str}`;
+    }
+    return str;
+  };
+
   const handleExportExcel = async () => {
     const exportData = stagedData.length > 0 ? stagedData : masterData;
-    if (!exportData || exportData.length === 0) return;
+    if (!exportData || exportData.length === 0) {
+      alert('No records available to export. Please load files or perform a search.');
+      return;
+    }
     try {
       const XLSX = await import('xlsx');
-      // Clean rows: remove all internal metadata properties starting with '_'
+      // Clean rows: remove all internal metadata properties starting with '_' and sanitize formula triggers
       const cleanRows = exportData.map(row => {
         const cleanObj = {};
         const keys = Object.keys(row);
         for (let i = 0; i < keys.length; i++) {
           const k = keys[i];
           if (!k.startsWith('_')) {
-            cleanObj[k] = row[k];
+            cleanObj[k] = sanitizeExportValue(row[k]);
           }
         }
         return cleanObj;
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(cleanRows);
+      const worksheet = XLSX.utils.json_to_sheet(cleanRows, { cellDates: false });
       const workbook = XLSX.utils.book_new();
 
       // Excel sheet name limit: max 31 characters, no invalid chars: \ / ? * [ ] :
@@ -164,16 +178,18 @@ function App() {
 
   const handleExportCSV = () => {
     const exportData = stagedData.length > 0 ? stagedData : masterData;
-    if (!exportData || exportData.length === 0) return;
+    if (!exportData || exportData.length === 0) {
+      alert('No records available to export. Please load files or perform a search.');
+      return;
+    }
     
-    // Pure high-speed CSV generator with UTF-8 BOM - zero external dependency
+    // Pure high-speed CSV generator with UTF-8 BOM and formula sanitization
     const headers = Object.keys(exportData[0]).filter(k => !k.startsWith('_'));
     const rows = [headers.join(',')];
     for (let i = 0; i < exportData.length; i++) {
       const row = exportData[i];
       const line = headers.map(h => {
-        const val = row[h];
-        if (val === null || val === undefined) return '""';
+        const val = sanitizeExportValue(row[h]);
         return `"${String(val).replace(/"/g, '""')}"`;
       });
       rows.push(line.join(','));

@@ -20,9 +20,14 @@ const devanagariMap = {
 const hasDevanagari = /[\u0900-\u097F]/;
 const labialConsonants = new Set(['प', 'फ', 'ब', 'भ', 'म', 'p', 'b', 'm']);
 
+export const normalizeUnicode = (text) => {
+  if (!text) return "";
+  return String(text).normalize('NFC').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+};
+
 export const transliterate = (text) => {
   if (!text) return "";
-  const str = String(text);
+  const str = normalizeUnicode(text);
   // Fast path: If pure English/ASCII, return lowercased directly
   if (!hasDevanagari.test(str)) {
     return str.toLowerCase();
@@ -127,10 +132,16 @@ export const deedSynonyms = {
 };
 
 export const cleanParty = (str) => {
-  return transliterate(String(str || ''))
+  if (!str) return '';
+  const preCleaned = normalizeUnicode(String(str || ''))
+    .replace(/(?:मे\.?|मेसर्स|तर्फे|भागीदार|कुलमुखत्यार|कु\.मु\.|उर्फ)/g, ' ');
+
+  return transliterate(preCleaned)
     .toLowerCase()
     .replace(/^[\d\.\-\)\s]+/, '')
-    .replace(/^(shri|sri|smt|mr|mrs|dr|adv|ms|advocate)\.?\s+/i, '')
+    .replace(/^(shri|sri|smt|mr|mrs|dr|adv|ms|advocate|mesrs|messrs|sau|m\/s)\.?\s+/i, '')
+    .replace(/\b(tarfe|trphe|bhagidar|partner|poa|urf|alias|s\/o|w\/o|d\/o|c\/o|h\/o)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
@@ -159,13 +170,28 @@ export const levenshtein = (a, b) => {
   return matrix[b.length][a.length];
 };
 
-// Deterministic row hash for accurate deduplication regardless of key order
+// Deterministic row hash for accurate deduplication within a file
 export const hashRecord = (row) => {
   if (!row || typeof row !== 'object') return '';
   const sortedKeys = Object.keys(row).sort();
   const normalizedObj = {};
   for (let k of sortedKeys) {
     normalizedObj[k] = row[k];
+  }
+  return JSON.stringify(normalizedObj);
+};
+
+// Canonical deduplication hash that strips ephemeral source provenance and internal metadata
+// Enables true cross-file duplicate detection (e.g. same deed in FileA.xlsx and FileB.xlsx)
+export const canonicalRecordHash = (row) => {
+  if (!row || typeof row !== 'object') return '';
+  const sortedKeys = Object.keys(row)
+    .filter(k => !k.startsWith('_') && k !== 'source_file' && k !== 'source_sheet' && k !== 'row_id')
+    .sort();
+  const normalizedObj = {};
+  for (let k of sortedKeys) {
+    const val = row[k];
+    normalizedObj[k] = val !== null && val !== undefined ? String(val).trim().toLowerCase() : '';
   }
   return JSON.stringify(normalizedObj);
 };
@@ -293,7 +319,7 @@ export const matchSingleCell = (cellValue, prep) => {
       return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact party name' };
     }
     if (Math.abs(cellClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(cellClean) === qSkel) {
-      return { matched: true, tier: 'PHONETIC', score: 90, reason: 'Exact phonetic name' };
+      return { matched: true, tier: 'EXACT', score: 95, reason: 'Exact phonetic name' };
     }
 
     // 2. Individual party equality and word-level party match
@@ -309,7 +335,7 @@ export const matchSingleCell = (cellValue, prep) => {
         return { matched: true, tier: 'EXACT', score: 100, reason: 'Exact party member' };
       }
       if (Math.abs(pClean.length - qClean.length) <= 6 && qSkel.length > 2 && getSkeleton(pClean) === qSkel) {
-        return { matched: true, tier: 'PHONETIC', score: 90, reason: 'Phonetic party member' };
+        return { matched: true, tier: 'EXACT', score: 95, reason: 'Exact phonetic party member' };
       }
 
       // Word-level strict matching within party only if query is a single word (e.g. searching "ashwini" matches "ashwini sandip lokhande")
@@ -319,10 +345,6 @@ export const matchSingleCell = (cellValue, prep) => {
         for (const pw of pWords) {
           if (pw === qMeta.word || (qMeta.len >= 3 && pw.startsWith(qMeta.word))) {
             return { matched: true, tier: 'EXACT', score: 95, reason: 'Party name token' };
-          }
-          const pwSkel = getSkeleton(pw);
-          if (pwSkel === qMeta.skel || (qMeta.skel.length >= 4 && pwSkel.startsWith(qMeta.skel))) {
-            return { matched: true, tier: 'PHONETIC', score: 85, reason: 'Phonetic name token' };
           }
         }
       }

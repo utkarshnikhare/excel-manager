@@ -4,15 +4,15 @@ import { enrichRow } from './propertyParser.js';
 export function parseIgrIndex2Text(fullText, fileName) {
   const records = [];
 
-  // Split by deed header markers if multiple deeds exist in the text
-  const deedBlocks = fullText.split(/(?=(?:दस्तऐवज\s*(?:क्र\.|क्रमांक)|Doc\s*No\.?)\s*[:\-])/i).filter(b => b.trim().length > 30);
+  // Split by deed header markers if multiple deeds exist in the text (supports "दस्तऐवज क्र.", "द. क्र.", "दस्तऐवज क्रमांक", "Doc No.")
+  const deedBlocks = fullText.split(/(?=(?:दस्तऐवज\s*(?:क्र\.|क्रमांक|नं\.?)|द\.\s*क्र\.|Doc(?:ument)?\s*No\.?)\s*[:\-])/i).filter(b => b.trim().length > 30);
   const blocksToProcess = deedBlocks.length > 0 ? deedBlocks : [fullText];
 
   for (let bIdx = 0; bIdx < blocksToProcess.length; bIdx++) {
     const block = blocksToProcess[bIdx];
 
     // Match document number: e.g. "दस्तऐवज क्र. : 16060 / 2024" or "Doc No: 16060"
-    const docNoMatch = block.match(/(?:दस्तऐवज\s*(?:क्र\.|क्रमांक)|Doc\s*No\.?)\s*[:\-]?\s*(\d+)/i);
+    const docNoMatch = block.match(/(?:दस्तऐवज\s*(?:क्र\.|क्रमांक|नं\.?)|द\.\s*क्र\.|Doc(?:ument)?\s*No\.?)\s*[:\-]?\s*(\d+)/i);
     const docNo = docNoMatch ? docNoMatch[1] : '';
 
     // Match registration date: e.g. "नोंदणी दिनांक : 15/04/2024" or "Date: 15/04/2024"
@@ -65,7 +65,9 @@ export function parseIgrIndex2Text(fullText, fileName) {
       purchaserparty: buyerParty || 'Allottee per Index-II',
       propertydescription: propDesc,
       source_file: fileName,
-      source_sheet: 'PDF_Extract'
+      source_sheet: 'PDF_Extract',
+      _extractionStatus: 'SUCCESS',
+      _deedIndex: bIdx + 1
     };
 
     records.push(enrichRow(parsedRow));
@@ -73,12 +75,16 @@ export function parseIgrIndex2Text(fullText, fileName) {
   return records;
 }
 
-// In-Browser PDF Text Extractor
+// In-Browser PDF Text Extractor (100% Client-Side & Zero-CDN Offline Privacy)
 export async function parsePdfBuffer(arrayBuffer, fileName) {
   try {
     const pdfjsLib = await import('pdfjs-dist/build/pdf');
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+      // Local self-hosted worker: prevents CDN leakage and enables true offline capability
+      const base = typeof window !== 'undefined' && window.location 
+        ? (window.location.origin + window.location.pathname.replace(/[^/]*$/, ''))
+        : '';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = base ? `${base}pdf.worker.min.js` : './pdf.worker.min.js';
     }
 
     const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
@@ -94,6 +100,29 @@ export async function parsePdfBuffer(arrayBuffer, fileName) {
     }
 
     const fullPdfText = pageTexts.join('\n');
+    const hasSufficientText = pageTexts.some(pt => pt.trim().length > 20);
+
+    // Scanned PDF detection: if embedded text layer is empty or unusable, flag clearly for OCR
+    if (!hasSufficientText) {
+      return [{
+        docno: 'SCANNED_DOC',
+        registrationdate: '—',
+        docname: 'Scanned Document (No Embedded Text)',
+        sroname: '—',
+        consideration_amt: 0,
+        marketvalue: 0,
+        stampdutypaid: 0,
+        registrationfees: 0,
+        sellerparty: 'Scanned Image / OCR Required',
+        purchaserparty: 'Scanned Image / OCR Required',
+        propertydescription: `This PDF (${fileName}, ${numPages} page${numPages > 1 ? 's' : ''}) appears to be a scanned image with no embedded digital text layer. Real-time OCR or searchable PDF conversion is recommended.`,
+        source_file: fileName,
+        source_sheet: 'Scanned_PDF',
+        _extractionStatus: 'SCANNED_NEEDS_OCR',
+        _isWarning: true,
+        _pageCount: numPages
+      }];
+    }
 
     // Strategy 1: Check if this is an IGR Index-II or Government Deed PDF
     if (fullPdfText.includes('दस्त') || fullPdfText.includes('नोंदणी') || fullPdfText.includes('Index') || fullPdfText.includes('मोबदला')) {
@@ -105,13 +134,14 @@ export async function parsePdfBuffer(arrayBuffer, fileName) {
     const genericRows = [];
 
     if (lines.length > 0) {
-      // First line as header candidate or default headers
       for (let i = 0; i < Math.min(lines.length, 500); i++) {
         genericRows.push({
           row_id: i + 1,
           pdf_text: lines[i],
           source_file: fileName,
-          source_sheet: 'Page_Content'
+          source_sheet: 'Page_Content',
+          _extractionStatus: 'SUCCESS',
+          _pageCount: numPages
         });
       }
     } else {
@@ -119,16 +149,41 @@ export async function parsePdfBuffer(arrayBuffer, fileName) {
         row_id: 1,
         content: fullPdfText.slice(0, 500),
         source_file: fileName,
-        source_sheet: 'Document_Summary'
+        source_sheet: 'Document_Summary',
+        _extractionStatus: 'PARTIAL',
+        _pageCount: numPages
       });
     }
 
     return genericRows;
   } catch (err) {
     console.warn('PDF parsing error, falling back to text stream:', err);
-    // Fallback: simple text decode
-    const decoder = new TextDecoder('utf-8');
-    const text = decoder.decode(new Uint8Array(arrayBuffer));
-    return parseIgrIndex2Text(text, fileName);
+    try {
+      const decoder = new TextDecoder('utf-8');
+      const text = decoder.decode(new Uint8Array(arrayBuffer));
+      if (text.includes('दस्त') || text.includes('नोंदणी')) {
+        return parseIgrIndex2Text(text, fileName);
+      }
+    } catch {
+      // Fall through to error response
+    }
+
+    return [{
+      docno: 'PARSE_ERROR',
+      registrationdate: '—',
+      docname: 'PDF Parse Error',
+      sroname: '—',
+      consideration_amt: 0,
+      marketvalue: 0,
+      stampdutypaid: 0,
+      registrationfees: 0,
+      sellerparty: '—',
+      purchaserparty: '—',
+      propertydescription: `Failed to parse PDF document: ${err.message}`,
+      source_file: fileName,
+      source_sheet: 'Error_Log',
+      _extractionStatus: 'FAILED',
+      _isWarning: true
+    }];
   }
 }

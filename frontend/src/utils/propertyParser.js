@@ -44,24 +44,40 @@ export function extractCarpetArea(desc) {
   if (!desc) return null;
   const str = normalizeDevanagariDigits(String(desc));
 
-  // 1. Marathi sq.ft: e.g. "650 चौ.फुट" or "650 चौ फूट"
-  const mrSqftMatch = str.match(/([\d\.]+)\s*(?:चौ\.?\s*फुट|चौ\.?\s*फु)/i);
+  // 1. Explicit CARPET area in Marathi sq.ft: e.g. "कारपेट क्षेत्र 629.26 चौ. फुट", "कारपेट 650 चौ.फूट"
+  const mrCarpetSqft = str.match(/(?:कारपेट\s*(?:क्षेत्र(?:फळ)?)?)\s*[:\-]?\s*([\d\.]+)\s*(?:चौ\.?\s*फ[ुू]ट|चौ\.?\s*फु)/i);
+  if (mrCarpetSqft) return parseFloat(mrCarpetSqft[1]);
+
+  // 2. Explicit CARPET area in English sq.ft: e.g. "Carpet Area 820 sq.ft", "Carpet 750 sqft"
+  const enCarpetSqft = str.match(/(?:carpet\s*(?:area)?)\s*[:\-]?\s*([\d\.]+)\s*(?:sq\.?\s*ft\.?|sqft|square\s*feet|sq\s*feet)/i);
+  if (enCarpetSqft) return parseFloat(enCarpetSqft[1]);
+
+  // 3. Explicit CARPET area in Marathi sq.mtr: e.g. "कारपेट क्षेत्र 50 चौ.मी."
+  const mrCarpetSqm = str.match(/(?:कारपेट\s*(?:क्षेत्र(?:फळ)?)?)\s*[:\-]?\s*([\d\.]+)\s*(?:चौ\.?\s*मी|चौ\.?\s*मिटर)/i);
+  if (mrCarpetSqm) return Math.round(parseFloat(mrCarpetSqm[1]) * 10.7639 * 100) / 100;
+
+  // 4. Explicit CARPET area in English sq.mtr: e.g. "Carpet 50 sq.mtr"
+  const enCarpetSqm = str.match(/(?:carpet\s*(?:area)?)\s*[:\-]?\s*([\d\.]+)\s*(?:sq\.?\s*m(?:tr)?\.?|sqmt|square\s*meters?)/i);
+  if (enCarpetSqm) return Math.round(parseFloat(enCarpetSqm[1]) * 10.7639 * 100) / 100;
+
+  // 5. General Marathi sq.ft: e.g. "650 चौ.फुट", "650 चौ.फूट", or "650 चौ फूट"
+  const mrSqftMatch = str.match(/([\d\.]+)\s*(?:चौ\.?\s*फ[ुू]ट|चौ\.?\s*फु)/i);
   if (mrSqftMatch) return parseFloat(mrSqftMatch[1]);
 
-  // 2. English sq.ft: e.g. "820 sq.ft", "820 sq ft", "820 sqft", "820 square feet"
+  // 6. General English sq.ft: e.g. "820 sq.ft", "820 sq ft", "820 sqft", "820 square feet"
   const enSqftMatch = str.match(/([\d\.]+)\s*(?:sq\.?\s*ft\.?|sqft|square\s*feet|sq\s*feet)/i);
   if (enSqftMatch) return parseFloat(enSqftMatch[1]);
 
-  // 3. Marathi sq.mtr: e.g. "50 चौ.मी" or "50 चौ. मी."
-  const mrSqmMatch = str.match(/([\d\.]+)\s*(?:चौ\.?\s*मी|चौ\.?\s*मिटर)/i);
+  // 7. General Marathi sq.mtr (avoiding plot area e.g. "1000 चौ.मी. पैकी"):
+  const mrSqmMatch = str.match(/([\d\.]+)\s*(?:चौ\.?\s*मी|चौ\.?\s*मिटर)(?!\s*पैकी)/i);
   if (mrSqmMatch) return Math.round(parseFloat(mrSqmMatch[1]) * 10.7639 * 100) / 100;
 
-  // 4. English sq.mtr: e.g. "50 sq.mtr", "50 sq mtr", "50 sqmt"
-  const enSqmMatch = str.match(/([\d\.]+)\s*(?:sq\.?\s*m(?:tr)?\.?|sqmt|square\s*meters?)/i);
+  // 8. General English sq.mtr: e.g. "50 sq.mtr", "50 sq mtr", "50 sqmt"
+  const enSqmMatch = str.match(/([\d\.]+)\s*(?:sq\.?\s*m(?:tr)?\.?|sqmt|square\s*meters?)(?!\s*out\s*of)/i);
   if (enSqmMatch) return Math.round(parseFloat(enSqmMatch[1]) * 10.7639 * 100) / 100;
 
-  // 5. Explicit area keyword: e.g. "Carpet Area 750" or "क्षेत्रफळ 750"
-  const areaMatch = str.match(/(?:carpet\s*area|area|क्षेत्रफळ)\s*[:\-]?\s*([\d\.]+)/i);
+  // 9. Explicit area keyword fallback: e.g. "Carpet Area 750"
+  const areaMatch = str.match(/(?:carpet\s*area|कारपेट\s*क्षेत्र(?:फळ)?)\s*[:\-]?\s*([\d\.]+)/i);
   if (areaMatch) {
     const val = parseFloat(areaMatch[1]);
     if (val >= 100 && val <= 10000) return val;
@@ -73,7 +89,8 @@ export function extractCarpetArea(desc) {
 export function extractFlatNo(desc) {
   if (!desc) return '';
   const str = normalizeDevanagariDigits(String(desc));
-  const match = str.match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|office|flat|shop|unit|plot|bungalow|row\s*house)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?)?\s*([A-Za-z0-9\-\/]+)/i);
+  // Matches flats, apartments, shops, offices, commercial units, and plots
+  const match = str.match(/(?:फलॅट|फ्लॅट|सदनिका|गाळा|ऑफीस|ऑफिस|दुकान|office|flat|shop|unit|plot|bungalow|row\s*house)\s*(?:no\.?|num\.?|number|#|नं\.?|क्र\.?)?\s*([A-Za-z0-9\-\/]+)/i);
   return match ? match[1] : '';
 }
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node test_suite.js && node test_full_app_audit.js",
+    "test": "node test_suite.js && node test_full_app_audit.js && node test_hardening_audit.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
