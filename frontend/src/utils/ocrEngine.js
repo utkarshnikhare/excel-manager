@@ -139,18 +139,31 @@ export async function ocrScannedPdf(pdfDoc, fileName, onProgress) {
     // Check if recognized text contains Index-II deed markers
     if (combinedOcrText.includes('दस्त') || combinedOcrText.includes('नोंदणी') || combinedOcrText.includes('मोबदला') || combinedOcrText.includes('खरेदी') || combinedOcrText.includes('Index')) {
       const parsedRecords = parseIgrIndex2Text(combinedOcrText, fileName);
-      return parsedRecords.map(rec => ({
-        ...rec,
-        _extractionSource: 'LOCAL_WASM_OCR',
-        _ocrStatus: 'OCR_SUCCESS',
-        _ocrEngine: 'Tesseract.js (mar+eng Offline WASM)',
-        _ocrConfidence: avgConfidence,
-        _ocrCertainty: avgConfidence >= 80 ? 'HIGH' : avgConfidence >= 55 ? 'MEDIUM' : 'UNCERTAIN',
-        _isLowConfidenceOcr: avgConfidence < 60,
-        _ocrAdvisory: avgConfidence < 60 ? 'Advisory: Low OCR confidence. Please verify against physical registered deed.' : null,
-        _rawText: combinedOcrText.trim(),
-        _ocrTextSnippet: combinedOcrText.slice(0, 300)
-      }));
+      return parsedRecords.map(rec => {
+        const parserScore = rec._confidenceScore || 0;
+        const parserCertainty = rec._extractionCertainty || 'UNCERTAIN';
+
+        // Calibrated Composite Certainty:
+        // Must satisfy BOTH Tesseract character recognition confidence AND parser extraction sanity
+        const isCompositeHigh = (avgConfidence >= 80 && parserScore >= 80 && parserCertainty === 'HIGH');
+        const isCompositeMedium = (!isCompositeHigh && avgConfidence >= 55 && parserScore >= 50 && parserCertainty !== 'UNCERTAIN');
+        const compositeCertainty = isCompositeHigh ? 'HIGH' : isCompositeMedium ? 'MEDIUM' : 'UNCERTAIN';
+        const isLowConfidence = avgConfidence < 60 || parserScore < 60 || compositeCertainty === 'UNCERTAIN';
+
+        return {
+          ...rec,
+          _extractionSource: 'LOCAL_WASM_OCR',
+          _ocrStatus: 'OCR_SUCCESS',
+          _ocrEngine: 'Tesseract.js (mar+eng Offline WASM)',
+          _ocrConfidence: avgConfidence,
+          _ocrCertainty: compositeCertainty,
+          _extractionCertainty: compositeCertainty,
+          _isLowConfidenceOcr: isLowConfidence,
+          _ocrAdvisory: isLowConfidence ? 'Advisory: Low OCR confidence or incomplete deed field extraction. Please verify against physical registered deed.' : null,
+          _rawText: combinedOcrText.trim(),
+          _ocrTextSnippet: combinedOcrText.slice(0, 300)
+        };
+      });
     }
 
     // Generic scanned PDF OCR record

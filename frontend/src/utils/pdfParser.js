@@ -54,23 +54,49 @@ export function parseIgrIndex2Text(fullText, fileName) {
     const descMatch = block.match(/(?:[०-९\d]+\.\s*)?(?:मिळकतीचे\s*वर्णन|Property\s*Description|वर्णन)\s*[:\-]?\s*([\s\S]+?)(?=(?:इतर\s*माहिती|नोंदणी\s*दिनांक|$))/i);
     const propDesc = descMatch ? descMatch[1].trim().replace(/\s+/g, ' ') : block.slice(0, 300);
 
-    // Extraction Certainty Scoring (Objective A: Distinguish extracted vs inferred values)
+    // Extraction Certainty Scoring & Semantic Calibration:
+    // Distinguish genuine extractions from inferred defaults, missing critical fields,
+    // and misleading field associations.
+    const isDocNoExtracted = Boolean(docNo);
+    const isRegDateExtracted = Boolean(regDate);
+    const isConsiderationExtracted = consAmt > 0;
+    const areBothPartiesExtracted = Boolean(sellerParty && buyerParty);
+    const isPartialPartiesExtracted = Boolean(sellerParty || buyerParty) && !areBothPartiesExtracted;
+    const isDuplicateParties = Boolean(sellerParty && buyerParty && sellerParty.toLowerCase() === buyerParty.toLowerCase());
+    const isPropertyExtracted = propDesc.length >= 25;
+
     const fieldConfidence = {
-      docno: docNo ? 'EXTRACTED' : 'INFERRED_DEFAULT',
-      registrationdate: regDate ? 'EXTRACTED' : 'UNSTATED',
-      consideration: consAmt > 0 ? 'EXTRACTED' : 'UNSTATED',
-      parties: (sellerParty && buyerParty) ? 'EXTRACTED' : (sellerParty || buyerParty) ? 'PARTIAL' : 'INFERRED_DEFAULT',
-      property: propDesc.length > 25 ? 'EXTRACTED' : 'BRIEF'
+      docno: isDocNoExtracted ? 'EXTRACTED' : 'INFERRED_DEFAULT',
+      registrationdate: isRegDateExtracted ? 'EXTRACTED' : 'UNSTATED',
+      consideration: isConsiderationExtracted ? 'EXTRACTED' : 'UNSTATED',
+      parties: isDuplicateParties ? 'SUSPICIOUS_DUPLICATE' : areBothPartiesExtracted ? 'EXTRACTED' : isPartialPartiesExtracted ? 'PARTIAL' : 'MISSING',
+      property: isPropertyExtracted ? 'EXTRACTED' : 'BRIEF'
     };
 
     let confidenceScore = 100;
-    if (!docNo) confidenceScore -= 20;
-    if (!regDate) confidenceScore -= 20;
-    if (consAmt === 0) confidenceScore -= 15;
-    if (!sellerParty || !buyerParty) confidenceScore -= 20;
-    if (propDesc.length < 25) confidenceScore -= 15;
+    // Missing document identifier is a primary defect: deduct 35 points
+    if (!isDocNoExtracted) confidenceScore -= 35;
+    // Missing registration date: deduct 15 points
+    if (!isRegDateExtracted) confidenceScore -= 15;
+    // Unstated consideration: deduct 15 points
+    if (!isConsiderationExtracted) confidenceScore -= 15;
+    // Parties evaluation
+    if (isDuplicateParties) {
+      confidenceScore -= 25; // Misleading association / duplicate extraction
+    } else if (!sellerParty && !buyerParty) {
+      confidenceScore -= 35; // Both parties missing
+    } else if (isPartialPartiesExtracted) {
+      confidenceScore -= 15; // Only one party extracted
+    }
+    // Brief or unextracted property description
+    if (!isPropertyExtracted) confidenceScore -= 15;
 
-    const extractionCertainty = confidenceScore >= 80 ? 'HIGH' : confidenceScore >= 50 ? 'MEDIUM' : 'UNCERTAIN';
+    // Hard safeguard: A deed can NEVER be HIGH certainty if docno is missing, both parties missing, or duplicate parties
+    const extractionCertainty = (confidenceScore >= 80 && isDocNoExtracted && (sellerParty || buyerParty) && !isDuplicateParties)
+      ? 'HIGH'
+      : (confidenceScore >= 50 && (isDocNoExtracted || (sellerParty && buyerParty)))
+        ? 'MEDIUM'
+        : 'UNCERTAIN';
 
     const parsedRow = {
       docno: docNo || String(1000 + bIdx),

@@ -296,8 +296,16 @@ const DeedDetailModal = ({ deed, onClose }) => {
                     fontWeight: 700,
                     padding: '0.15rem 0.45rem',
                     borderRadius: '4px',
-                    background: deed._extractionCertainty === 'HIGH' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                    color: deed._extractionCertainty === 'HIGH' ? '#047857' : '#b45309'
+                    background: deed._extractionCertainty === 'HIGH' 
+                      ? 'rgba(16, 185, 129, 0.15)' 
+                      : deed._extractionCertainty === 'MEDIUM'
+                        ? 'rgba(245, 158, 11, 0.15)'
+                        : 'rgba(239, 68, 68, 0.15)',
+                    color: deed._extractionCertainty === 'HIGH' 
+                      ? '#047857' 
+                      : deed._extractionCertainty === 'MEDIUM'
+                        ? '#b45309'
+                        : '#b91c1c'
                   }}>
                     Certainty: {deed._extractionCertainty}
                   </span>

@@ -129,19 +129,19 @@ This independent audit conducted an adversarial, evidence-based review of branch
 | **Audit 6: Excluded Scopes** | Local Storage Untouched | **VERIFIED** | `workspaceStorage.js` diff = 0 lines |
 | | Offline First-Use Untouched | **VERIFIED** | `public/tesseract/*` and worker paths unchanged |
 | | Export Security Untouched | **VERIFIED** | `sanitizeExportValueHardened` intact & verified |
-| **Audit 7: Quality Gates** | npm test (all suites) | **VERIFIED** | Exit code 0, 203 total assertions passing across 8 suites |
+| **Audit 7: Quality Gates** | npm test (all suites) | **VERIFIED** | Exit code 0, 227 total assertions passing across 10 suites |
 | | npm run lint | **VERIFIED** | Exit code 0, 0 errors, 0 warnings |
-| | npm run build | **VERIFIED** | Exit code 0, 754ms build time |
+| | npm run build | **VERIFIED** | Exit code 0, 1.1s build time |
 
 ---
 
 ## 4. GO / NO-GO Recommendation
 
-### Recommendation: **CONDITIONAL GO (Authorized for Release Review)**
+### Recommendation: **CONDITIONAL GO (Awaiting Real Physical Scan Corpus)**
 
 **Justification:**
-1. **Core Data Integrity Is Completely Solid:** All 6 critical functional fixes (Devanagari numerals, preamble splitting, numeric skeleton repeated digits, blank column keys, CSV leading zeros, and modal Escape key) are thoroughly verified with zero regressions.
-2. **Quality Gates Are 100% Green:** `npm test` (203/203 assertions), `npm run lint` (0 errors / 0 warnings), `npm run build` (clean bundle), real-browser Chrome adversarial suite (22/22), cross-browser Chromium/Edge suite (26/26), and multi-engine Firefox/WebKit suite (34/34) all pass with exit code 0.
+1. **Core Data Integrity Is Completely Solid:** All critical functional fixes (Devanagari numerals, preamble splitting, numeric skeleton repeated digits, blank column keys, CSV leading zeros, modal focus trapping, and calibrated certainty scoring) are thoroughly verified with zero regressions.
+2. **Quality Gates Are 100% Green:** `npm test` (227/227 assertions across 10 suites), `npm run lint` (0 errors / 0 warnings), `npm run build` (clean bundle), real-browser Chrome adversarial suite (22/22), cross-browser Chromium/Edge suite (26/26), and multi-engine Firefox/WebKit suite (34/34) all pass with exit code 0.
 3. **Documented Accessibility Gaps Resolved:** Modal focus trapping, initial focus placement, focus restoration to trigger elements, and screen-reader live announcements have been fully implemented and verified across Chrome, Edge, Firefox, and WebKit.
 4. **Mandatory Scope Exclusions are Fully Preserved:** Protected storage, offline PWA paths, and formula injection defenses were not modified.
 5. **Transparency Maintained:** Documentation honestly notes the operational boundaries of degraded physical scan OCR and outlines the exact specification for a 30–50 document evaluation corpus when physical scans become available.
